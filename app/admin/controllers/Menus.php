@@ -1,6 +1,9 @@
-<?php namespace Admin\Controllers;
+<?php
+
+namespace Admin\Controllers;
 
 use Admin\Classes\AdminController;
+use Admin\Models\Menu_options_model;
 use AdminMenu;
 use ApplicationException;
 
@@ -9,6 +12,7 @@ class Menus extends AdminController
     public $implement = [
         'Admin\Actions\ListController',
         'Admin\Actions\FormController',
+        'Admin\Actions\LocationAwareController',
     ];
 
     public $listConfig = [
@@ -24,6 +28,7 @@ class Menus extends AdminController
     public $formConfig = [
         'name' => 'lang:admin::lang.menus.text_form_name',
         'model' => 'Admin\Models\Menus_model',
+        'request' => 'Admin\Requests\Menu',
         'create' => [
             'title' => 'lang:admin::lang.form.create_title',
             'redirect' => 'menus/edit/{menu_id}',
@@ -50,20 +55,26 @@ class Menus extends AdminController
     {
         parent::__construct();
 
-        AdminMenu::setContext('menus', 'kitchen');
+        AdminMenu::setContext('menus', 'restaurant');
     }
 
     public function edit_onChooseMenuOption($context, $recordId)
     {
         $menuOptionId = post('Menu._options');
-        if (!$menuOptionId)
+        if (!$menuOption = Menu_options_model::find($menuOptionId))
             throw new ApplicationException('Please select a menu option to attach');
 
         $model = $this->asExtension('FormController')->formFindModelObject($recordId);
 
-        $model->menu_options()->create([
-            'option_id' => $menuOptionId,
-        ]);
+        $menuItemOption = $model->menu_options()->create(['option_id' => $menuOptionId]);
+
+        $menuOption->option_values()->get()->each(function ($model) use ($menuItemOption) {
+            $menuItemOption->menu_option_values()->create([
+                'menu_option_id' => $menuItemOption->menu_option_id,
+                'option_value_id' => $model->option_value_id,
+                'new_price' => $model->price,
+            ]);
+        });
 
         $model->reload();
         $this->asExtension('FormController')->initForm($model, $context);
@@ -78,29 +89,5 @@ class Menus extends AdminController
                 'useContainer' => FALSE,
             ]),
         ];
-    }
-
-    public function formValidate($model, $form)
-    {
-        $rules = [
-            ['menu_name', 'lang:admin::lang.menus.label_name', 'required|min:2|max:255'],
-            ['menu_description', 'lang:admin::lang.menus.label_description', 'min:2|max:1028'],
-            ['menu_price', 'lang:admin::lang.menus.label_price', 'required|numeric'],
-            ['categories.*', 'lang:admin::lang.menus.label_category', 'required|integer'],
-            ['stock_qty', 'lang:admin::lang.menus.label_stock_qty', 'integer'],
-            ['minimum_qty', 'lang:admin::lang.menus.label_minimum_qty', 'required|integer'],
-            ['subtract_stock', 'lang:admin::lang.menus.label_subtract_stock', 'required|integer'],
-            ['menu_status', 'lang:admin::lang.label_status', 'required|integer'],
-            ['mealtime_id', 'lang:admin::lang.menus.label_mealtime', 'integer'],
-            ['menu_priority', 'lang:admin::lang.menus.label_menu_priority', 'integer'],
-            ['special.special_id', 'lang:admin::lang.menus.label_special_status', 'integer'],
-            ['special.special_status', 'lang:admin::lang.menus.label_special_status', 'required|integer'],
-        ];
-
-        $rules[] = ['special.start_date', 'lang:admin::lang.menus.label_start_date', 'valid_date'];
-        $rules[] = ['special.end_date', 'lang:admin::lang.menus.label_end_date', 'valid_date'];
-        $rules[] = ['special.special_price', 'lang:admin::lang.menus.label_special_price', 'numeric'];
-
-        return $this->validatePasses(post($form->arrayName), $rules);
     }
 }

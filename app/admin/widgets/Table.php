@@ -5,8 +5,7 @@ namespace Admin\Widgets;
 use Admin\Classes\BaseWidget;
 use Admin\Widgets\Table\Source\DataSource;
 use Exception;
-use Input;
-use Request;
+use Illuminate\Support\Facades\Request;
 
 class Table extends BaseWidget
 {
@@ -18,7 +17,7 @@ class Table extends BaseWidget
     protected $columns = [];
 
     /**
-     * @var boolean Show data table header
+     * @var bool Show data table header
      */
     protected $showHeader = TRUE;
 
@@ -119,7 +118,7 @@ class Table extends BaseWidget
         $isClientDataSource = $this->isClientDataSource();
         $this->vars['clientDataSourceClass'] = $isClientDataSource ? 'client' : 'server';
         $this->vars['data'] = json_encode($isClientDataSource
-            ? $this->dataSource->getAllRecords() : []
+            ? $this->processRecords($this->dataSource->getAllRecords()) : []
         );
     }
 
@@ -141,6 +140,10 @@ class Table extends BaseWidget
             if (isset($data['title']))
                 $data['title'] = lang($data['title']);
 
+            if (isset($data['partial'])) {
+                unset($data['partial']);
+            }
+
             $result[] = $data;
         }
 
@@ -154,8 +157,8 @@ class Table extends BaseWidget
 
     public function onGetDropdownOptions()
     {
-        $columnName = Input::get('column');
-        $rowData = Input::get('rowData');
+        $columnName = Request::get('column');
+        $rowData = Request::get('rowData');
 
         $eventResults = $this->fireEvent('table.getDropdownOptions', [$columnName, $rowData]);
 
@@ -167,5 +170,29 @@ class Table extends BaseWidget
         return [
             'options' => $options,
         ];
+    }
+
+    public function processRecords($records)
+    {
+        foreach ($records as $index => $record) {
+            $records[$index] = $this->processRecord($record);
+        }
+
+        return $records;
+    }
+
+    protected function processRecord($record)
+    {
+        foreach ($this->columns as $key => $column) {
+            if (isset($record[$key], $column['partial'])) {
+                $record[$key] = $this->makePartial($column['partial'], [
+                    'column' => $column,
+                    'record' => $record,
+                    'item' => $record[$key],
+                ]);
+            }
+        }
+
+        return $record;
     }
 }

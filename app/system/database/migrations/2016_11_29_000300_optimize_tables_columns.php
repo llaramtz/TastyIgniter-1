@@ -1,4 +1,6 @@
-<?php namespace System\Database\Migrations;
+<?php
+
+namespace System\Database\Migrations;
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -67,16 +69,6 @@ class OptimizeTablesColumns extends Migration
             $table->integer('parent_id')->nullable()->change();
             $table->integer('priority')->default(0)->change();
             $table->string('image')->nullable()->change();
-        };
-    }
-
-    protected function _optimize_coupons()
-    {
-        return function (Blueprint $table) {
-            $table->text('description')->nullable()->change();
-            $table->boolean('status')->nullable()->change();
-            $table->string('validity', 15)->nullable()->change();
-            $table->string('recurring_every', 35)->nullable()->change();
         };
     }
 
@@ -270,14 +262,6 @@ class OptimizeTablesColumns extends Migration
         return function (Blueprint $table) {
             $table->date('start_date')->nullable()->change();
             $table->date('end_date')->nullable()->change();
-        };
-    }
-
-    protected function _optimize_messages()
-    {
-        return function (Blueprint $table) {
-            $table->string('send_type')->change();
-            $table->string('recipient')->change();
         };
     }
 

@@ -1,11 +1,11 @@
-<?php namespace Admin\Models;
+<?php
+
+namespace Admin\Models;
 
 use Model;
 
 /**
  * Menu categories Model Class
- *
- * @package Admin
  */
 class Menu_categories_model extends Model
 {
@@ -19,11 +19,14 @@ class Menu_categories_model extends Model
      */
     public $incrementing = FALSE;
 
-    protected $fillable = ['category_id', 'menu_id'];
+    public $casts = [
+        'menu_id' => 'integer',
+        'category_id' => 'integer',
+    ];
 
     public $relation = [
         'belongsTo' => [
-            'menu'     => ['Admin\Models\Menus_model'],
+            'menu' => ['Admin\Models\Menus_model'],
             'category' => ['Admin\Models\Categories_model'],
         ],
     ];

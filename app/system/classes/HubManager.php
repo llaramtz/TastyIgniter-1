@@ -1,4 +1,6 @@
-<?php namespace System\Classes;
+<?php
+
+namespace System\Classes;
 
 use ApplicationException;
 use Cache;
@@ -10,7 +12,6 @@ use Request;
 
 /**
  * Hub Manager Class
- * @package System
  */
 class HubManager
 {
@@ -25,21 +26,12 @@ class HubManager
     public function initialize()
     {
         $this->cachePrefix = 'hub_';
-        $this->cacheTtl = 5;
+        $this->cacheTtl = now()->addHours(3);
     }
 
     public function listItems($filter = [])
     {
-        $cacheKey = $this->getCacheKey('items', $filter);
-
-        if (!$items = Cache::get($cacheKey)) {
-            $items = $this->requestRemoteData('items', array_merge(['include' => 'require'], $filter));
-
-            if (!empty($items) AND is_array($items))
-                Cache::put($cacheKey, $items, $this->cacheTtl);
-        }
-
-        return $items;
+        return $this->requestRemoteData('items', array_merge(['include' => 'require'], $filter));
     }
 
     public function getDetail($type, $itemName = [])
@@ -56,8 +48,6 @@ class HubManager
     {
         $response = $this->requestRemoteData('core/apply', [
             'items' => $itemNames,
-            'version' => params('ti_version'),
-            'edge' => Config::get('system.edgeUpdates', FALSE),
         ]);
 
         return $response;
@@ -65,18 +55,15 @@ class HubManager
 
     public function applyItemsToUpdate($itemNames, $force = FALSE)
     {
-        $cacheKey = $force ? null : $this->getCacheKey('updates', $itemNames);
+        $cacheKey = $this->getCacheKey('updates', $itemNames);
 
-        if (!$response = Cache::get($cacheKey)) {
+        if ($force OR !$response = Cache::get($cacheKey)) {
             $response = $this->requestRemoteData('core/apply', [
                 'items' => $itemNames,
                 'include' => 'tags',
-                'version' => params('ti_version'),
-                'force' => $force,
-                'edge' => Config::get('system.edgeUpdates', FALSE),
             ]);
 
-            if ($cacheKey AND is_array($response)) {
+            if (is_array($response)) {
                 $response['check_time'] = Carbon::now()->toDateTimeString();
                 Cache::put($cacheKey, $response, $this->cacheTtl);
             }
@@ -87,9 +74,7 @@ class HubManager
 
     public function applyCoreVersion()
     {
-        $result = $this->requestRemoteData('ping', [
-            'edge' => Config::get('system.edgeUpdates', FALSE)
-        ]);
+        $result = $this->requestRemoteData('ping');
 
         return array_get($result, 'pong', 'v3.0.0');
     }
@@ -123,13 +108,19 @@ class HubManager
     {
         return $this->requestRemoteFile('core/download', [
             'item' => $params,
-            'edge' => Config::get('system.edgeUpdates', FALSE),
         ], $filePath, $fileHash);
     }
 
     protected function getSecurityKey()
     {
-        return (!$carteKey = params('carte_key')) ? md5('NULL') : decrypt($carteKey);
+        $carteKey = params('carte_key', '');
+        try {
+            $carteKey = decrypt($carteKey);
+        }
+        catch (Exception $e) {
+        }
+
+        return strlen($carteKey) ? $carteKey : md5('NULL');
     }
 
     protected function getCacheKey($fileName, $suffix)
@@ -139,6 +130,11 @@ class HubManager
 
     protected function requestRemoteData($url, $params = [])
     {
+        if (!function_exists('curl_init')) {
+            echo 'cURL PHP extension required.'.PHP_EOL;
+            exit(1);
+        }
+
         $result = null;
 
         try {
@@ -172,8 +168,13 @@ class HubManager
         return $response;
     }
 
-    protected function requestRemoteFile($url, $params = [], $filePath, $fileHash)
+    protected function requestRemoteFile($url, array $params, $filePath, $fileHash)
     {
+        if (!function_exists('curl_init')) {
+            echo 'cURL PHP extension required.'.PHP_EOL;
+            exit(1);
+        }
+
         if (!is_dir($fileDir = dirname($filePath)))
             throw new ApplicationException("Downloading failed, download path ({$filePath}) not found.");
 
@@ -206,7 +207,7 @@ class HubManager
                     : "Download failed, File hash mismatch: {$fileHash} (expected) vs {$fileSha} (actual)"
             );
 
-            throw new ApplicationException(sprintf('Downloading %s failed, check error logs.', array_get($params, 'item.name')));
+            throw new ApplicationException(sprintf('Downloading %s failed, check system logs.', array_get($params, 'item.name')));
         }
 
         return TRUE;
@@ -224,11 +225,16 @@ class HubManager
         curl_setopt($curl, CURLOPT_AUTOREFERER, TRUE);
         curl_setopt($curl, CURLOPT_FOLLOWLOCATION, TRUE);
 
-        // SKIP SSL Check for Wamp
-        curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
-        curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
+        $params['client'] = 'tastyigniter';
+        $params['server'] = base64_encode(serialize([
+            'php' => PHP_VERSION,
+            'url' => url()->to('/'),
+            'version' => params('ti_version', 'v3.0.0'),
+        ]));
 
-        $params['url'] = base64_encode(root_url());
+        if (Config::get('system.edgeUpdates', FALSE)) {
+            $params['edge'] = 1;
+        }
 
         if ($siteKey = $this->getSecurityKey()) {
             curl_setopt($curl, CURLOPT_HTTPHEADER, ["TI-Rest-Key: bearer {$siteKey}"]);

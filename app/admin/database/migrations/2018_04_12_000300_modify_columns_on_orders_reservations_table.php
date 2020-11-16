@@ -1,4 +1,6 @@
-<?php namespace Admin\Database\Migrations;
+<?php
+
+namespace Admin\Database\Migrations;
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -25,8 +27,5 @@ class ModifyColumnsOnOrdersReservationsTable extends Migration
 
     public function down()
     {
-        Schema::table('reservations', function (Blueprint $table) {
-            $table->renameColumn('status_id', 'status');
-        });
     }
 }

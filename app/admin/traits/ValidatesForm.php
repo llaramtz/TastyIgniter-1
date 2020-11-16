@@ -2,11 +2,14 @@
 
 namespace Admin\Traits;
 
+use App;
 use Closure;
 use Igniter\Flame\Exception\ValidationException;
 use Illuminate\Contracts\Validation\Factory;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Str;
 use Session;
+use System\Helpers\ValidationHelper;
 
 trait ValidatesForm
 {
@@ -16,9 +19,9 @@ trait ValidatesForm
      * Validate the given request with the given rules.
      *
      * @param  $request
-     * @param  array $rules
-     * @param  array $messages
-     * @param  array $customAttributes
+     * @param array $rules
+     * @param array $messages
+     * @param array $customAttributes
      *
      * @return array|bool
      */
@@ -27,7 +30,7 @@ trait ValidatesForm
         $validator = $this->makeValidator($request, $rules, $messages, $customAttributes);
 
         if ($validator->fails()) {
-            Session::flash('errors', $validator->errors());
+            $this->flashValidationErrors($validator->errors());
 
             return FALSE;
         }
@@ -39,9 +42,9 @@ trait ValidatesForm
      * Validate the given request with the given rules.
      *
      * @param  $request
-     * @param  array $rules
-     * @param  array $messages
-     * @param  array $customAttributes
+     * @param array $rules
+     * @param array $messages
+     * @param array $customAttributes
      *
      * @return array
      */
@@ -50,7 +53,7 @@ trait ValidatesForm
         $validator = $this->makeValidator($request, $rules, $messages, $customAttributes);
 
         if ($validator->fails()) {
-            Session::flash('errors', $validator->errors());
+            $this->flashValidationErrors($validator->errors());
             throw new ValidationException($validator);
         }
 
@@ -59,13 +62,12 @@ trait ValidatesForm
 
     public function makeValidator($request, array $rules, array $messages = [], array $customAttributes = [])
     {
-        if (!$customAttributes)
-            $customAttributes = $this->parseAttributes($rules);
-
-        $rules = $this->parseRules($rules);
+        $parsed = ValidationHelper::prepareRules($rules);
+        $rules = Arr::get($parsed, 'rules', $rules);
+        $customAttributes = Arr::get($parsed, 'attributes', $customAttributes);
 
         $validator = $this->getValidationFactory()->make(
-            $request, $rules, $messages, $customAttributes
+            $request ?? [], $rules, $messages, $customAttributes
         );
 
         if ($this->validateAfterCallback instanceof Closure)
@@ -93,8 +95,8 @@ trait ValidatesForm
             return [];
 
         $result = [];
-        foreach ($rules as $key => list($name, $attribute,)) {
-            $result[$name] = (sscanf($attribute, 'lang:%s', $line) === 1) ? lang($line) : $attribute;
+        foreach ($rules as $key => [$name, $attribute]) {
+            $result[$name] = is_lang_key($attribute) ? lang($attribute) : $attribute;
         }
 
         return $result;
@@ -103,8 +105,8 @@ trait ValidatesForm
     /**
      * Get the request input based on the given validation rules.
      *
-     * @param  \Illuminate\Http\Request $request
-     * @param  array $rules
+     * @param \Illuminate\Http\Request $request
+     * @param array $rules
      *
      * @return array
      */
@@ -129,5 +131,15 @@ trait ValidatesForm
     public function validateAfter(Closure $callback)
     {
         $this->validateAfterCallback = $callback;
+    }
+
+    protected function flashValidationErrors($errors)
+    {
+        $sessionKey = 'errors';
+
+        if (App::runningInAdmin())
+            $sessionKey = 'admin_errors';
+
+        return Session::flash($sessionKey, $errors);
     }
 }

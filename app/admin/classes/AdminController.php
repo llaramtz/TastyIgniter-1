@@ -9,9 +9,17 @@ use Admin\Traits\WidgetMaker;
 use Admin\Widgets\Menu;
 use Admin\Widgets\Toolbar;
 use AdminAuth;
+use AdminLocation;
 use AdminMenu;
 use Exception;
+use Igniter\Flame\Exception\AjaxException;
+use Igniter\Flame\Exception\ApplicationException;
+use Igniter\Flame\Exception\SystemException;
+use Igniter\Flame\Exception\ValidationException;
+use Igniter\Flame\Flash\Facades\Flash;
+use Illuminate\Database\Eloquent\MassAssignmentException;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Facades\View;
 use Main\Widgets\MediaManager;
 use Redirect;
 use Request;
@@ -48,7 +56,7 @@ class AdminController extends BaseController
 
     /**
      * @var string Permission required to view this page.
-     * ex. Admin.Banners or Admin.Banners.Access
+     * ex. Admin.Banners.Access
      */
     protected $requiredPermissions;
 
@@ -69,6 +77,7 @@ class AdminController extends BaseController
     {
         // Define layout and view paths
         $this->layout = $this->layout ?: 'default';
+        $this->configPath = [];
 
         $this->definePaths();
 
@@ -82,8 +91,10 @@ class AdminController extends BaseController
         $toolbar->bindToController();
 
         // Media Manager widget is available on all admin pages
-        $manager = new MediaManager($this, ['alias' => 'mediamanager']);
-        $manager->bindToController();
+        if ($this->currentUser AND $this->currentUser->hasPermission('Admin.MediaManager')) {
+            $manager = new MediaManager($this, ['alias' => 'mediamanager']);
+            $manager->bindToController();
+        }
 
         $this->fireEvent('controller.afterConstructor', [$this]);
     }
@@ -95,26 +106,26 @@ class AdminController extends BaseController
         $className = basename($classPath);
 
         // Add paths from the extension / module context
-        $this->viewPath[] = '~/extensions/'.$relativePath.'/views';
-        $this->viewPath[] = '~/extensions/'.$relativePath.'/views/'.$className;
+        $this->viewPath[] = '$/'.$relativePath.'/views';
+        $this->viewPath[] = '$/'.$relativePath.'/views/'.$className;
         $this->viewPath[] = '~/app/'.$relativePath.'/views/'.$className;
         $this->viewPath[] = '~/app/'.$relativePath.'/views';
         $this->viewPath[] = '~/app/admin/views/'.$className;
         $this->viewPath[] = '~/app/admin/views';
 
         // Add layout paths from the extension / module context
-        $this->layoutPath[] = '~/extensions/'.$relativePath.'/views/_layouts';
+        $this->layoutPath[] = '$/'.$relativePath.'/views/_layouts';
         $this->layoutPath[] = '~/app/'.$relativePath.'/views/_layouts';
         $this->layoutPath[] = '~/app/admin/views/_layouts';
 
         // Add partial paths from the extension / module context
         // We will also make sure the admin module context is always present
-        $this->partialPath[] = '~/extensions/'.$relativePath.'/views/_partials';
+        $this->partialPath[] = '$/'.$relativePath.'/views/_partials';
         $this->partialPath[] = '~/app/'.$relativePath.'/views/_partials';
         $this->partialPath[] = '~/app/admin/views/_partials';
         $this->partialPath = array_merge($this->partialPath, $this->viewPath);
 
-        $this->configPath[] = '~/extensions/'.$relativePath.'/models/config';
+        $this->configPath[] = '$/'.$relativePath.'/models/config';
         $this->configPath[] = '~/app/'.$relativePath.'/models/config';
 
         $this->assetPath = '~/app/'.$relativePath.'/assets';
@@ -131,19 +142,26 @@ class AdminController extends BaseController
         // Ensures that a user is logged in, if required
         if ($requireAuthentication) {
             if (!$this->checkUser()) {
-                flash()->error(lang('admin::lang.alert_user_not_logged_in'))->important();
-
-                return Admin::redirectGuest('login');
+                return Request::ajax()
+                    ? Response::make(lang('admin::lang.alert_user_not_logged_in'), 403)
+                    : Admin::redirectGuest('login');
             }
 
             // Check that user has permission to view this page
-            if ($this->requiredPermissions AND !$this->getUser()->hasPermission($this->requiredPermissions, TRUE)) {
-                return $this->redirectBack(302, [], 'dashboard');
+            if ($this->requiredPermissions AND !$this->getUser()->hasAnyPermission($this->requiredPermissions)) {
+                return Response::make(Request::ajax()
+                    ? lang('admin::lang.alert_user_restricted')
+                    : View::make('admin::access_denied'), 403
+                );
             }
         }
 
         // Top menu widget is available on all admin pages
         $this->makeMainMenuWidget();
+
+        if ($event = $this->fireSystemEvent('admin.controller.beforeResponse', [$action, $params])) {
+            return $event;
+        }
 
         // Execute post handler and AJAX event
         if ($handlerResponse = $this->processHandlers() AND $handlerResponse !== TRUE) {
@@ -155,10 +173,6 @@ class AdminController extends BaseController
 
         if (!is_string($response))
             return $response;
-
-        if ($event = $this->fireEvent('controller.beforeResponse', [$this, $response])) {
-            return $event;
-        }
 
         // Return response
         return is_string($response)
@@ -175,35 +189,13 @@ class AdminController extends BaseController
         $this->execPageAction($this->action, $this->params);
     }
 
-    protected function processHandlers()
-    {
-        if (!$handler = Request::header('X-IGNITER-REQUEST-HANDLER'))
-            $handler = post('_handler');
-
-        if (!$handler)
-            return FALSE;
-
-        $params = $this->params;
-        array_unshift($params, $this->action);
-
-        $result = $this->runHandler($handler, $params);
-
-        $response = [];
-        if ($result instanceof RedirectResponse AND Request::ajax()) {
-            $response['X_IGNITER_REDIRECT'] = $result->getTargetUrl();
-            $result = null;
-        }
-
-        return $result ?: $response;
-    }
-
     protected function execPageAction($action, $params)
     {
         $result = null;
 
         if (!$this->checkAction($action)) {
             throw new Exception(sprintf(
-                "Method [%s] is not found in the controller [%s]",
+                'Method [%s] is not found in the controller [%s]',
                 $action, get_class($this)
             ));
         }
@@ -235,16 +227,122 @@ class AdminController extends BaseController
     }
 
     //
-    // Helper Methods
+    //
     //
 
-    public function locationContext()
+    /**
+     * Returns the AJAX handler for the current request, if available.
+     * @return string
+     */
+    public function getHandler()
     {
-        if ($this->getUser()->hasStrictLocationAccess())
-            return 'single';
+        if (Request::ajax() AND $handler = Request::header('X-IGNITER-REQUEST-HANDLER'))
+            return trim($handler);
 
-        return setting()->get('site_location_mode');
+        if ($handler = post('_handler'))
+            return trim($handler);
+
+        return null;
     }
+
+    protected function processHandlers()
+    {
+        if (!$handler = $this->getHandler())
+            return FALSE;
+
+        try {
+            $this->validateHandler($handler);
+
+            $partials = $this->validateHandlerPartials();
+
+            $response = [];
+
+            $params = $this->params;
+            array_unshift($params, $this->action);
+            $result = $this->runHandler($handler, $params);
+
+            foreach ($partials as $partial) {
+                $response[$partial] = $this->makePartial($partial);
+            }
+
+            if (Request::ajax()) {
+                if ($result instanceof RedirectResponse) {
+                    $response['X_IGNITER_REDIRECT'] = $result->getTargetUrl();
+                    $result = null;
+                }
+                elseif (Flash::messages()->isNotEmpty()) {
+                    $response['#notification'] = $this->makePartial('flash');
+                }
+            }
+
+            if (is_array($result)) {
+                $response = array_merge($response, $result);
+            }
+            elseif (is_string($result)) {
+                $response['result'] = $result;
+            }
+            elseif (is_object($result)) {
+                return $result;
+            }
+
+            return $response;
+        }
+        catch (ValidationException $ex) {
+            $this->flashValidationErrors($ex->getErrors());
+
+            if (Request::ajax())
+                return ['#notification' => $this->makePartial('flash')];
+
+            throw new AjaxException($ex->getMessage());
+        }
+        catch (MassAssignmentException $ex) {
+            throw new ApplicationException(lang('admin::lang.form.mass_assignment_failed', ['attribute' => $ex->getMessage()]));
+        }
+        catch (Exception $ex) {
+            throw $ex;
+        }
+    }
+
+    protected function validateHandler($handler)
+    {
+        if (!preg_match('/^(?:\w+\:{2})?on[A-Z]{1}[\w+]*$/', $handler)) {
+            throw new SystemException("Invalid ajax handler name: {$handler}");
+        }
+    }
+
+    protected function validateHandlerPartials()
+    {
+        if (!$partials = trim(Request::header('X-IGNITER-REQUEST-PARTIALS')))
+            return [];
+
+        $partials = explode('&', $partials);
+
+        foreach ($partials as $partial) {
+            if (!preg_match('/^(?:\w+\:{2}|@)?[a-z0-9\_\-\.\/]+$/i', $partial)) {
+                throw new SystemException("Invalid partial name: $partial");
+            }
+        }
+
+        return $partials;
+    }
+
+    //
+    // Locationable
+    //
+
+    public function getUserLocation()
+    {
+        return AdminLocation::getLocation();
+    }
+
+    public function getLocationId()
+    {
+        return AdminLocation::getId();
+    }
+
+    //
+    // Helper Methods
+    //
 
     public function pageUrl($path = null, $parameters = [], $secure = null)
     {
@@ -268,7 +366,7 @@ class AdminController extends BaseController
 
     public function redirectBack($status = 302, $headers = [], $fallback = FALSE)
     {
-        return Redirect::back($status, $headers, Admin::url($fallback ? $fallback : 'dashboard'));
+        return Redirect::back($status, $headers, Admin::url($fallback ?: 'dashboard'));
     }
 
     public function refresh()
@@ -280,7 +378,7 @@ class AdminController extends BaseController
     {
         // Process Widget handler
         if (strpos($handler, '::')) {
-            list($widgetName, $handlerName) = explode('::', $handler);
+            [$widgetName, $handlerName] = explode('::', $handler);
 
             // Execute the page action so widgets are initialized
             $this->pageAction();

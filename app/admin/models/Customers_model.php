@@ -1,26 +1,22 @@
-<?php namespace Admin\Models;
+<?php
+
+namespace Admin\Models;
 
 use Carbon\Carbon;
-use DB;
-use Igniter\Flame\ActivityLog\Traits\LogsActivity;
+use Exception;
 use Igniter\Flame\Auth\Models\User as AuthUserModel;
 use Igniter\Flame\Database\Traits\Purgeable;
 
 /**
  * Customers Model Class
- *
- * @package Admin
  */
 class Customers_model extends AuthUserModel
 {
-    use LogsActivity;
     use Purgeable;
 
+    const UPDATED_AT = null;
+
     const CREATED_AT = 'date_added';
-
-    protected static $logAttributes = ['name'];
-
-    protected static $recordEvents = ['created', 'deleted'];
 
     /**
      * @var string The database table name
@@ -41,21 +37,28 @@ class Customers_model extends AuthUserModel
     public $relation = [
         'hasMany' => [
             'addresses' => ['Admin\Models\Addresses_model', 'delete' => TRUE],
-            'orders' => ['Admin\Models\Orders_model', 'delete' => TRUE],
-            'reservations' => ['Admin\Models\Reservations_model', 'delete' => TRUE],
+            'orders' => ['Admin\Models\Orders_model'],
+            'reservations' => ['Admin\Models\Reservations_model'],
         ],
         'belongsTo' => [
             'group' => ['Admin\Models\Customer_groups_model', 'foreignKey' => 'customer_group_id'],
             'address' => 'Admin\Models\Addresses_model',
         ],
-        'morphMany' => [
-            'messages' => ['System\Models\Message_meta_model', 'name' => 'messagable'],
-        ],
     ];
 
-    public $purgeable = ['addresses'];
+    protected $purgeable = ['addresses'];
+
+    public $appends = ['full_name'];
 
     public $casts = [
+        'customer_id' => 'integer',
+        'address_id' => 'integer',
+        'customer_group_id' => 'integer',
+        'newsletter' => 'boolean',
+        'status' => 'boolean',
+        'is_activated' => 'boolean',
+        'last_login' => 'datetime',
+        'date_activated' => 'datetime',
         'reset_time' => 'datetime',
     ];
 
@@ -78,11 +81,6 @@ class Customers_model extends AuthUserModel
         return strtolower($value);
     }
 
-    public function getDateAddedAttribute($value)
-    {
-        return day_elapsed($value);
-    }
-
     //
     // Scopes
     //
@@ -96,12 +94,25 @@ class Customers_model extends AuthUserModel
     // Events
     //
 
-    public function afterCreate()
+    public function beforeLogin()
+    {
+        if (!$this->group OR !$this->group->requiresApproval())
+            return;
+
+        if ($this->is_activated OR $this->status)
+            return;
+
+        throw new Exception(sprintf(
+            'Cannot login user "%s" until activated.', $this->email
+        ));
+    }
+
+    protected function afterCreate()
     {
         $this->saveCustomerGuestOrder();
     }
 
-    public function afterSave()
+    protected function afterSave()
     {
         $this->restorePurgedValues();
 
@@ -115,11 +126,6 @@ class Customers_model extends AuthUserModel
     //
     // Helpers
     //
-
-    public function getMessageForEvent($eventName)
-    {
-        return parse_values(['event' => $eventName], lang('admin::lang.customers.activity_event_log'));
-    }
 
     public function enabled()
     {
@@ -175,8 +181,8 @@ class Customers_model extends AuthUserModel
         $idsToKeep = [];
         foreach ($addresses as $address) {
             $customerAddress = $this->addresses()->updateOrCreate(
-                array_only($address, ['customer_id', 'address_id']),
-                $address
+                array_only($address, ['address_id']),
+                array_except($address, ['address_id', 'customer_id'])
             );
 
             $idsToKeep[] = $customerAddress->getKey();
@@ -205,17 +211,10 @@ class Customers_model extends AuthUserModel
                 foreach ($orders as $row) {
                     if (empty($row['order_id'])) continue;
 
-                    Coupons_history_model::where('order_id', $row['order_id'])->update($update);
-
                     if ($row['order_type'] == '1' AND !empty($row['address_id'])) {
                         Addresses_model::where('address_id', $row['address_id'])->update($update);
                     }
 
-                    // @todo: move to paypal extension
-                    if (!empty($row['payment'])) {
-                        DB::table('pp_payments')->where('order_id', $row['order_id'])
-                          ->update(['customer_id' => $customer_id]);
-                    }
                 }
             }
 

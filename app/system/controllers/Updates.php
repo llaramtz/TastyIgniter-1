@@ -1,9 +1,13 @@
-<?php namespace System\Controllers;
+<?php
+
+namespace System\Controllers;
 
 use AdminMenu;
 use ApplicationException;
 use Exception;
 use Flash;
+use Main\Classes\ThemeManager;
+use System\Classes\ExtensionManager;
 use System\Classes\UpdateManager;
 use System\Models\Extensions_model;
 use System\Models\Themes_model;
@@ -12,8 +16,6 @@ use Template;
 class Updates extends \Admin\Classes\AdminController
 {
     public $checkUrl = 'updates';
-
-    public $forceCheckUrl = 'updates?check=force';
 
     public $browseUrl = 'updates/browse';
 
@@ -28,26 +30,15 @@ class Updates extends \Admin\Classes\AdminController
 
     public function index()
     {
-        if ($this->getUser()->hasPermission('Admin.Extensions.Manage'))
-            Extensions_model::syncAll();
-
+        Extensions_model::syncAll();
         Themes_model::syncAll();
-
-        if (!params()->has('carte_key')) {
-            Flash::warning(lang('system::lang.missing.carte_key'))->now();
-        }
 
         $pageTitle = lang('system::lang.updates.text_title');
         Template::setTitle($pageTitle);
         Template::setHeading($pageTitle);
 
-        Template::setButton(sprintf(lang('system::lang.updates.button_browse'), 'extensions'), ['class' => 'btn btn-default', 'href' => admin_url($this->browseUrl.'/extensions')]);
-        if (input('check') == 'force') {
-            Template::setButton(lang('system::lang.updates.button_updates'), ['class' => 'btn btn-success', 'href' => admin_url($this->checkUrl)]);
-        }
-        else {
-            Template::setButton(lang('system::lang.updates.button_check'), ['class' => 'btn btn-success', 'href' => admin_url($this->forceCheckUrl)]);
-        }
+        Template::setButton(sprintf(lang('system::lang.updates.button_browse'), 'extensions'), ['class' => 'btn btn-primary', 'href' => admin_url($this->browseUrl.'/extensions')]);
+        Template::setButton(lang('system::lang.updates.button_check'), ['class' => 'btn btn-success', 'data-request' => 'onCheckUpdates']);
         Template::setButton(lang('system::lang.updates.button_carte'), ['class' => 'btn btn-default pull-right', 'role' => 'button', 'data-target' => '#carte-modal', 'data-toggle' => 'modal']);
 
         Template::setButton(sprintf(lang('system::lang.version'), params('ti_version')), [
@@ -59,7 +50,7 @@ class Updates extends \Admin\Classes\AdminController
         try {
             $updateManager = UpdateManager::instance();
             $this->vars['carteInfo'] = $updateManager->getSiteDetail();
-            $this->vars['updates'] = $updates = $updateManager->requestUpdateList(input('check') == 'force');
+            $this->vars['updates'] = $updates = $updateManager->requestUpdateList();
 
             $lastChecked = isset($updates['last_check'])
                 ? time_elapsed($updates['last_check'])
@@ -83,22 +74,19 @@ class Updates extends \Admin\Classes\AdminController
 
     public function browse($context, $itemType = null)
     {
-        if (!params()->has('carte_key')) {
-            Flash::warning(lang('system::lang.missing.carte_key'))->now();
-        }
+        if (!in_array($itemType, ['themes', 'extensions']))
+            return $this->redirectBack();
 
         $updateManager = UpdateManager::instance();
 
-        $pageTitle = ($itemType == 'extensions') ? lang('system::lang.updates.text_tab_title_extensions') : lang('system::lang.updates.text_tab_title_themes');
+        $pageTitle = lang('system::lang.updates.text_tab_title_'.$itemType);
         Template::setTitle(sprintf(lang('system::lang.updates.text_browse_title'), $pageTitle));
         Template::setHeading(sprintf(lang('system::lang.updates.text_browse_title'), $pageTitle));
 
         $buttonType = ($itemType == 'extensions') ? 'themes' : 'extensions';
-        $buttonTitle = ($buttonType == 'extensions')
-            ? lang('system::lang.updates.text_tab_title_extensions')
-            : lang('system::lang.updates.text_tab_title_themes');
+        $buttonTitle = lang('system::lang.updates.text_tab_title_'.$buttonType);
 
-        Template::setButton(sprintf(lang('system::lang.updates.button_browse'), $buttonTitle), ['class' => 'btn btn-default', 'href' => admin_url($this->browseUrl.'/'.$buttonType)]);
+        Template::setButton(sprintf(lang('system::lang.updates.button_browse'), $buttonTitle), ['class' => 'btn btn-primary', 'href' => admin_url($this->browseUrl.'/'.$buttonType)]);
         Template::setButton(lang('system::lang.updates.button_updates'), ['class' => 'btn btn-success', 'href' => admin_url($this->checkUrl)]);
         Template::setButton(lang('system::lang.updates.button_carte'), ['class' => 'btn btn-default pull-right', 'role' => 'button', 'data-target' => '#carte-modal', 'data-toggle' => 'modal']);
 
@@ -117,7 +105,6 @@ class Updates extends \Admin\Classes\AdminController
         $json = [];
 
         if ($filter = input('filter') AND is_array($filter)) {
-
             $itemType = $filter['type'] ?? 'extension';
             $searchQuery = isset($filter['search']) ? strtolower($filter['search']) : '';
 
@@ -137,6 +124,14 @@ class Updates extends \Admin\Classes\AdminController
         $this->addJs('ui/js/vendor/mustache.js', 'mustache-js');
         $this->addJs('ui/js/vendor/typeahead.js', 'typeahead-js');
         $this->addJs('ui/js/updates.js', 'updates-js');
+    }
+
+    public function index_onCheckUpdates()
+    {
+        $updateManager = UpdateManager::instance();
+        $updateManager->requestUpdateList(TRUE);
+
+        return $this->redirect($this->checkUrl);
     }
 
     public function index_onApplyCarte()
@@ -216,7 +211,11 @@ class Updates extends \Admin\Classes\AdminController
     {
         $error = null;
 
-        $items = input('items');
+        $items = input('items') ?? [];
+
+// Uncomment this block to require carte key
+//        if (!params()->has('carte_key'))
+//            throw new ApplicationException(lang('system::lang.missing.carte_key'));
 
         if (!count($items))
             throw new ApplicationException('No item(s) specified.');
@@ -243,7 +242,6 @@ class Updates extends \Admin\Classes\AdminController
             return $processSteps;
 
         foreach (['download', 'extract', 'complete'] as $step) {
-
             // Silly way to sort the process
             $applySteps = [
                 'core' => [],
@@ -358,7 +356,10 @@ class Updates extends \Admin\Classes\AdminController
                     $updateManager->setCoreVersion($item['version'], $item['hash']);
                     break;
                 case 'extension':
-                    Extensions_model::install($item['code'], $item['version']);
+                    ExtensionManager::instance()->installExtension($item['code'], $item['version']);
+                    break;
+                case 'theme':
+                    ThemeManager::instance()->installTheme($item['code'], $item['version']);
                     break;
             }
         }
@@ -378,7 +379,7 @@ class Updates extends \Admin\Classes\AdminController
     {
         $rules = [
             ['items.*.name', 'lang:system::lang.updates.label_meta_code', 'required'],
-            ['items.*.type', 'lang:system::lang.updates.label_meta_type', 'required'],
+            ['items.*.type', 'lang:system::lang.updates.label_meta_type', 'required|in:extension,theme,language'],
             ['items.*.ver', 'lang:system::lang.updates.label_meta_version', 'required'],
             ['items.*.action', 'lang:system::lang.updates.label_meta_action', 'required|in:install,update'],
         ];

@@ -1,9 +1,13 @@
-.map-area-toolbar {
-	background-color: var(--gray-400);
-	padding: 10px;
+.map-modal .area-labels {
+	overflow: auto;
+	position: absolute;
+	left: 0;
+	right: 0;
+	margin-top: 10px;
+	z-index: 1004;
 }
-.panel-area-body {
-	padding: 0;
-	height: 546px;
-	overflow-y: auto;
+.map-modal .area-labels .badge {
+	padding: 10px;
+	margin-right: 5px;
+	cursor: pointer;
 }

@@ -4,15 +4,15 @@ namespace System\Traits;
 
 use App;
 use ApplicationException;
-use Assetic\Asset\AssetCache;
-use Assetic\Asset\AssetCollection;
-use Assetic\Asset\FileAsset;
-use Assetic\Asset\HttpAsset;
-use Assetic\Cache\FilesystemCache;
 use Cache;
 use Carbon\Carbon;
 use Event;
 use File;
+use Igniter\Flame\Assetic\Asset\AssetCache;
+use Igniter\Flame\Assetic\Asset\AssetCollection;
+use Igniter\Flame\Assetic\Asset\FileAsset;
+use Igniter\Flame\Assetic\Asset\HttpAsset;
+use Igniter\Flame\Assetic\Cache\FilesystemCache;
 use Request;
 use Response;
 
@@ -54,10 +54,10 @@ trait CombinesAssets
 
     protected function initCombiner()
     {
+        $this->cacheKeyPrefix = 'ti.combiner.';
         $this->useCache = config('system.enableAssetCache', TRUE);
         $this->useMinify = config('system.enableAssetMinify', null);
-        $this->cacheKeyPrefix = 'ti.combiner.';
-
+        $this->combineAssets = config('system.enableAssetCombiner', FALSE);
         $this->storagePath = storage_path('system/combiner/data');
         $this->assetsCombinerUri = config('system.assetsCombinerUri', '/_assets');
 
@@ -67,18 +67,16 @@ trait CombinesAssets
         if ($this->useMinify === null)
             $this->useMinify = !config('app.debug', FALSE);
 
-        $this->combineAssets = config('system.enableAssetCombiner', FALSE);
+        $this->registerFilter('css', new \Igniter\Flame\Assetic\Filter\CssImportFilter);
+        $this->registerFilter(['css', 'scss'], new \Igniter\Flame\Assetic\Filter\CssRewriteFilter);
 
-        $this->registerFilter('css', new \Assetic\Filter\CssImportFilter);
-        $this->registerFilter(['css', 'scss'], new \Assetic\Filter\CssRewriteFilter);
-
-        $scssPhpFilter = new \Assetic\Filter\ScssphpFilter;
+        $scssPhpFilter = new \Igniter\Flame\Assetic\Filter\ScssphpFilter;
         $scssPhpFilter->addImportPath(base_path());
         $this->registerFilter('scss', $scssPhpFilter);
 
         if ($this->useMinify) {
-            $this->registerFilter('js', new \Assetic\Filter\JSMinFilter);
-            $this->registerFilter(['css', 'scss'], new \Assetic\Filter\CssMinFilter);
+            $this->registerFilter('js', new \Igniter\Flame\Assetic\Filter\JSMinFilter);
+            $this->registerFilter(['css', 'scss'], new \Igniter\Flame\Assetic\Filter\CssMinFilter);
         }
     }
 
@@ -145,6 +143,9 @@ trait CombinesAssets
      */
     public function combineToFile(array $assets, $destination)
     {
+        // Disable cache always
+        $this->storagePath = null;
+
         $targetPath = File::localToPublic(dirname($destination));
         $combiner = $this->prepareCombiner($assets, $targetPath);
 
@@ -246,6 +247,10 @@ trait CombinesAssets
 
     protected function applyCacheOnFiles($files)
     {
+        if ($this->storagePath === null) {
+            return $files;
+        }
+
         if (!File::isDirectory($this->storagePath)) {
             @File::makeDirectory($this->storagePath);
         }
@@ -301,10 +306,11 @@ trait CombinesAssets
      * @param $extension
      * @param $files
      * @param null $destination
+     * @param string $appContext
      *
      * @return void
      */
-    public function registerBundle($extension, $files, $destination = null)
+    public function registerBundle($extension, $files, $destination = null, $appContext = 'main')
     {
         if (!is_array($files))
             $files = [$files];
@@ -329,7 +335,7 @@ trait CombinesAssets
             }
         }
 
-        $this->bundles[$extension][$destination] = $files;
+        $this->bundles[$appContext][$extension][$destination] = $files;
     }
 
     /**
@@ -337,15 +343,16 @@ trait CombinesAssets
      *
      * @param string $extension
      *
+     * @param string $appContext
      * @return array
      */
-    public function getBundles($extension = null)
+    public function getBundles($extension = null, $appContext = 'main')
     {
         if (is_null($extension))
-            return $this->bundles;
+            return $this->bundles[$appContext] ?? [];
 
-        if (isset($this->bundles[$extension]))
-            return $this->bundles[$extension];
+        if (isset($this->bundles[$appContext][$extension]))
+            return $this->bundles[$appContext][$extension];
 
         return null;
     }

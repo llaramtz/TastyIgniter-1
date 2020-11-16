@@ -7,8 +7,6 @@ namespace Admin\Classes;
  * A translation of the filter scope configuration
  *
  * Adapted from october\backend\classes\FilterScope
- *
- * @package Admin
  */
 class FilterScope
 {
@@ -55,7 +53,7 @@ class FilterScope
     /**
      * @var string Specifies contextual visibility of this form scope.
      */
-    public $context = null;
+    public $context;
 
     /**
      * @var bool Specify if the scope is disabled or not.

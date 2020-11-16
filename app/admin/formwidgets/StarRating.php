@@ -1,13 +1,12 @@
-<?php namespace Admin\FormWidgets;
+<?php
+
+namespace Admin\FormWidgets;
 
 use Admin\Classes\BaseFormWidget;
-use System\Models\Settings_model;
 
 /**
  * Star Rating
  * Renders a raty star field.
- *
- * @package Admin
  */
 class StarRating extends BaseFormWidget
 {
@@ -66,8 +65,6 @@ class StarRating extends BaseFormWidget
      */
     protected function getHints()
     {
-        $result = Settings_model::where('sort', 'ratings')->first();
-
-        return array_get($result->value, 'ratings', []);
+        return array_get(setting('ratings'), 'ratings', []);
     }
 }

@@ -1,4 +1,6 @@
-<?php namespace Admin\Controllers;
+<?php
+
+namespace Admin\Controllers;
 
 use AdminMenu;
 
@@ -11,32 +13,33 @@ class StaffGroups extends \Admin\Classes\AdminController
 
     public $listConfig = [
         'list' => [
-            'model'        => 'Admin\Models\Staff_groups_model',
-            'title'        => 'lang:admin::lang.staff_groups.text_title',
+            'model' => 'Admin\Models\Staff_groups_model',
+            'title' => 'lang:admin::lang.staff_groups.text_title',
             'emptyMessage' => 'lang:admin::lang.staff_groups.text_empty',
-            'defaultSort'  => ['staff_group_id', 'DESC'],
-            'configFile'   => 'staff_groups_model',
+            'defaultSort' => ['staff_group_id', 'DESC'],
+            'configFile' => 'staff_groups_model',
         ],
     ];
 
     public $formConfig = [
-        'name'       => 'lang:admin::lang.staff_groups.text_form_name',
-        'model'      => 'Admin\Models\Staff_groups_model',
-        'create'     => [
-            'title'         => 'lang:admin::lang.form.create_title',
-            'redirect'      => 'staff_groups/edit/{staff_group_id}',
+        'name' => 'lang:admin::lang.staff_groups.text_form_name',
+        'model' => 'Admin\Models\Staff_groups_model',
+        'request' => 'Admin\Requests\StaffGroup',
+        'create' => [
+            'title' => 'lang:admin::lang.form.create_title',
+            'redirect' => 'staff_groups/edit/{staff_group_id}',
             'redirectClose' => 'staff_groups',
         ],
-        'edit'       => [
-            'title'         => 'lang:admin::lang.form.edit_title',
-            'redirect'      => 'staff_groups/edit/{staff_group_id}',
+        'edit' => [
+            'title' => 'lang:admin::lang.form.edit_title',
+            'redirect' => 'staff_groups/edit/{staff_group_id}',
             'redirectClose' => 'staff_groups',
         ],
-        'preview'    => [
-            'title'    => 'lang:admin::lang.form.preview_title',
+        'preview' => [
+            'title' => 'lang:admin::lang.form.preview_title',
             'redirect' => 'staff_groups',
         ],
-        'delete'     => [
+        'delete' => [
             'redirect' => 'staff_groups',
         ],
         'configFile' => 'staff_groups_model',
@@ -48,19 +51,6 @@ class StaffGroups extends \Admin\Classes\AdminController
     {
         parent::__construct();
 
-        AdminMenu::setContext('staff_groups', 'users');
-    }
-
-    public function formValidate($model, $form)
-    {
-        $rules = [
-            ['staff_group_name', 'lang:admin::lang.staff_groups.label_name', 'required|min:2|max:32'],
-            ['customer_account_access', 'lang:admin::lang.staff_groups.label_customer_account_access', 'required|integer'],
-            ['location_access', 'lang:admin::lang.staff_groups.label_location_access', 'required|integer'],
-        ];
-
-        $rules[] = ['permissions.*.*', 'Permission', 'string'];
-
-        return $this->validatePasses($form->getSaveData(), $rules);
+        AdminMenu::setContext('staffs', 'users');
     }
 }

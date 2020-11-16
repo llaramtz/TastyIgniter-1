@@ -1,7 +1,6 @@
 <?php
 
 use Carbon\Carbon;
-use Igniter\Flame\Location\Facades\Location;
 
 if (!function_exists('controller')) {
     /**
@@ -10,7 +9,7 @@ if (!function_exists('controller')) {
      */
     function controller()
     {
-        return \Main\Classes\MainController::getController();
+        return \Main\Classes\MainController::getController() ?? new \Main\Classes\MainController;
     }
 }
 
@@ -61,9 +60,6 @@ if (!function_exists('restaurant_url')) {
      */
     function restaurant_url($uri = null, array $params = [])
     {
-        if (App::bound('location') AND !isset($params['location']) AND $current = Location::current())
-            $params['location'] = $current->permalink_slug;
-
         return page_url($uri, $params);
     }
 }
@@ -74,8 +70,8 @@ if (!function_exists('admin_url')) {
      * Create a local URL based on your admin path.
      * Segments can be passed in as a string.
      *
-     * @param    string $uri
-     * @param    array $params
+     * @param string $uri
+     * @param array $params
      *
      * @return    string
      */
@@ -157,6 +153,64 @@ if (!function_exists('mdate')) {
     }
 }
 
+if (!function_exists('mdate_to_moment_js_format')) {
+    /**
+     * Convert PHP Date formats to Moment JS Date Formats
+     *
+     * @param string $format
+     *
+     * @return int
+     */
+    function convert_php_to_moment_js_format($format)
+    {
+        $replacements = [
+            'd' => 'DD',
+            'D' => 'ddd',
+            'j' => 'D',
+            'l' => 'dddd',
+            'N' => 'E',
+            'S' => 'o',
+            'w' => 'e',
+            'z' => 'DDD',
+            'W' => 'W',
+            'F' => 'MMMM',
+            'm' => 'MM',
+            'M' => 'MMM',
+            'n' => 'M',
+            't' => '',
+            'L' => '',
+            'o' => 'YYYY',
+            'Y' => 'YYYY',
+            'y' => 'YY',
+            'a' => 'a',
+            'A' => 'A',
+            'B' => '',
+            'g' => 'h',
+            'G' => 'H',
+            'h' => 'hh',
+            'H' => 'HH',
+            'i' => 'mm',
+            's' => 'ss',
+            'u' => 'SSS',
+            'e' => 'zz',
+            'I' => '',
+            'O' => '',
+            'P' => '',
+            'T' => '',
+            'Z' => '',
+            'c' => '',
+            'r' => '',
+            'U' => 'X',
+        ];
+
+        foreach ($replacements as $from => $to) {
+            $replacements['\\'.$from] = '['.$from.']';
+        }
+
+        return strtr($format, $replacements);
+    }
+}
+
 if (!function_exists('time_elapsed')) {
     /**
      * Get time elapsed
@@ -168,43 +222,9 @@ if (!function_exists('time_elapsed')) {
      *
      * @return string
      */
-    function time_elapsed($datetime, $full = null)
+    function time_elapsed($datetime)
     {
-        $now = new DateTime;
-        $ago = new DateTime($datetime);
-        $diff = $now->diff($ago);
-
-        $diff->w = floor($diff->d / 7);
-        $diff->d -= $diff->w * 7;
-
-        $string = [
-            'y' => 'year',
-            'm' => 'month',
-            'w' => 'week',
-            'd' => 'day',
-            'h' => 'hour',
-            'i' => 'minute',
-            's' => 'second',
-        ];
-
-        foreach ($string as $key => &$value) {
-            if ($diff->$key) {
-                $value = $diff->$key.' '.$value.($diff->$key > 1 ? 's' : '');
-            }
-            else {
-                unset($string[$key]);
-            }
-        }
-
-        if (!empty($full)) {
-            $intersect = array_intersect_key($string, array_flip($full));
-            $string = (empty($intersect)) ? $string : $intersect;
-        }
-        else {
-            $string = array_slice($string, 0, 1);
-        }
-
-        return $string ? implode(', ', $string).' ago' : 'just now';
+        return make_carbon($datetime)->diffForHumans();
     }
 }
 
@@ -218,22 +238,23 @@ if (!function_exists('day_elapsed')) {
      *
      * @return string
      */
-    function day_elapsed($datetime)
+    function day_elapsed($datetime, $full = TRUE)
     {
-        $datetime = strtotime($datetime);
+        $datetime = make_carbon($datetime);
+        $time = $datetime->format('H:i');
+        $date = $datetime->format('j M Y');
 
-        if (mdate('%d %M', $datetime) === mdate('%d %M', time())) {
-            return 'Today';
+        if ($datetime->isToday()) {
+            $date = 'Today';
         }
-        else if (mdate('%d %M', $datetime) === mdate('%d %M', strtotime('yesterday'))) {
-            return 'Yesterday';
+        elseif ($datetime->isYesterday()) {
+            $date = 'Yesterday';
+        }
+        elseif ($datetime->isTomorrow()) {
+            $date = 'Tomorrow';
         }
 
-        if (mdate('%Y', $datetime) === mdate('%Y', time())) {
-            return mdate('%d %M %y', $datetime);
-        }
-
-        return mdate('%d %M %y', $datetime);
+        return $full ? $date.' at '.$time : $date;
     }
 }
 
@@ -242,10 +263,10 @@ if (!function_exists('time_range')) {
      * Date range
      * Returns a list of time within a specified period.
      *
-     * @param    int $unix_start UNIX timestamp of period start time
-     * @param    int $unix_end UNIX timestamp of period end time
-     * @param    int $interval Specifies the second interval
-     * @param    string $time_format Output time format, same as in date()
+     * @param int $unix_start UNIX timestamp of period start time
+     * @param int $unix_end UNIX timestamp of period end time
+     * @param int $interval Specifies the second interval
+     * @param string $time_format Output time format, same as in date()
      *
      * @return    array
      */
@@ -272,6 +293,26 @@ if (!function_exists('time_range')) {
         $times[] = mdate($time_format, $start_time);
 
         return $times;
+    }
+}
+
+if (!function_exists('parse_date_format')) {
+    /**
+     * @param string $format The time format
+     *
+     * @return string $format The date format
+     */
+    function parse_date_format($format)
+    {
+        if (str_contains($format, '%')) {
+            $format = str_replace(
+                '%\\',
+                '',
+                preg_replace('/([a-z]+?){1}/i', '\\\\\\1', $format)
+            );
+        }
+
+        return $format;
     }
 }
 
@@ -322,7 +363,7 @@ if (!function_exists('is_single_location')) {
      */
     function is_single_location()
     {
-        return (setting('site_location_mode') === 'single');
+        return setting('site_location_mode') === \Admin\Models\Locations_model::LOCATION_CONTEXT_SINGLE;
     }
 }
 
@@ -332,8 +373,8 @@ if (!function_exists('log_message')) {
      * We use this as a simple mechanism to access the logging
      * class and send messages to be logged.
      *
-     * @param    string $level the error level: 'error', 'debug' or 'info'
-     * @param    string $message the error message
+     * @param string $level the error level: 'error', 'debug' or 'info'
+     * @param string $message the error message
      *
      * @return    void
      */
@@ -448,7 +489,6 @@ if (!function_exists('convert_underscore_to_camelcase')) {
      * Current URL
      * Converts a string_with_underscore into StringWithCamelCase. Strings can be passed via the
      * first parameter either as a string or an array.
-     * @access    public
      * @return    string
      */
     function convert_underscore_to_camelcase($string = '')
@@ -460,10 +500,9 @@ if (!function_exists('convert_underscore_to_camelcase')) {
 if (!function_exists('contains_substring')) {
     /**
      * Determine if a given string contains a given substring.
-     * @access    public
      *
-     * @param  string $haystack
-     * @param  string|array $needles
+     * @param string $haystack
+     * @param string|array $needles
      *
      * @return bool
      */
@@ -479,3 +518,71 @@ if (!function_exists('contains_substring')) {
     }
 }
 
+if (!function_exists('is_lang_key')) {
+    /**
+     * Determine if a given string matches a language key.
+     *
+     * @param string $line
+     *
+     * @return bool
+     */
+    function is_lang_key($line)
+    {
+        if (!is_string($line)) {
+            return FALSE;
+        }
+
+        if (strpos($line, '::') !== FALSE) {
+            return TRUE;
+        }
+
+        if (starts_with($line, 'lang:')) {
+            return TRUE;
+        }
+
+        return FALSE;
+    }
+}
+
+if (!function_exists('generate_extension_icon')) {
+    function generate_extension_icon($icon)
+    {
+        if (is_string($icon))
+            $icon = ['class' => 'fa '.$icon];
+
+        $icon = array_merge([
+            'class' => 'fa fa-plug',
+            'color' => '',
+            'image' => null,
+            'backgroundColor' => null,
+            'backgroundImage' => null,
+        ], $icon);
+
+        $styles = [];
+        if (strlen($color = array_get($icon, 'color')))
+            $styles[] = "color:$color;";
+
+        if (strlen($backgroundColor = array_get($icon, 'backgroundColor')))
+            $styles[] = "background-color:$backgroundColor;";
+
+        if (is_array($backgroundImage = array_get($icon, 'backgroundImage')))
+            $styles[] = "background-image:url('data:$backgroundImage[0];base64,$backgroundImage[1]');";
+
+        $icon['styles'] = implode(' ', $styles);
+
+        return $icon;
+    }
+}
+
+if (!function_exists('array_replace_key')) {
+    function array_replace_key($array, $oldKey, $newKey)
+    {
+        $keys = array_keys($array);
+
+        if (($keyIndex = array_search($oldKey, $keys, TRUE)) !== FALSE) {
+            $keys[$keyIndex] = $newKey;
+        }
+
+        return array_combine($keys, array_values($array));
+    }
+}

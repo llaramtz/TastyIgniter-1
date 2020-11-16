@@ -7,7 +7,8 @@
     var MainMenu = function (element, options) {
         this.options = options
         this.$el = $(element)
-        this.$refreshButton = $('<button type="button" class="btn btn-default pull-right refresh"><i class="fa fa-refresh"></i></button>')
+        this.loadingHtml = '<p class="spinner text-muted text-center"><span class="ti-loading fa-3x fa-fw"></span></p>'
+        this.$markAsReadButton = $('<a href="#" class="pull-right mark-as-read"><i class="fa fa-check"></i></a>')
 
         // Init
         this.init()
@@ -18,6 +19,12 @@
             throw new Error('Main menu option "alias" is not set.')
 
         this.$el.on('show.bs.dropdown', '.dropdown', $.proxy(this.onDropdownShow, this))
+
+        this.$el.on('click', '.dropdown-menu', function (event) {
+            var $el = $(event.target)
+            if ($el.data('toggle') !== 'modal')
+                event.stopPropagation();
+        });
     }
 
     MainMenu.prototype.requestOptions = function ($itemMenu) {
@@ -28,15 +35,38 @@
             return
 
         $.request(this.options.alias + '::onGetDropdownOptions', {
+            type: 'GET',
             data: {item: itemName}
-        }).always(function () {
-            var $refreshButton = self.$refreshButton.clone()
-            $itemMenu.find('.menu-header .refresh').remove()
-            $itemMenu.find('.menu-header').prepend($refreshButton)
-            $refreshButton.on('click', $.proxy(self.onRefreshOptions, self))
         }).done(function () {
+            var $markAsReadButton = self.$markAsReadButton.clone()
+            $itemMenu.find('.dropdown-header .mark-as-read').remove()
+            $itemMenu.find('.dropdown-header').prepend($markAsReadButton)
+            $markAsReadButton.on('click', $.proxy(self.onMarkOptionsAsRead, self))
+
             $itemMenu.addClass('is-loaded')
         })
+    }
+
+    MainMenu.prototype.clearOptions = function (itemName) {
+        var $itemMenu = this.$el.find('[data-request-options='+itemName+']')
+
+        if (!$itemMenu.length || !$itemMenu.hasClass('is-loaded'))
+            return
+
+        $itemMenu.dropdown('hide')
+        $itemMenu.removeClass('is-loaded')
+        $itemMenu.find('.dropdown-header .mark-as-read').remove()
+        $itemMenu.find('.dropdown-body').html(this.loadingHtml)
+    }
+
+    MainMenu.prototype.updateBadgeCount = function (itemName, count) {
+        var $itemMenu = this.$el.find('[data-request-options='+itemName+']'),
+            $dropdown = $itemMenu.closest('.dropdown'),
+            $dropdownBadge = $dropdown.find('[data-toggle="dropdown"] .badge'),
+            prevBadgeCount = parseInt($dropdownBadge.html()),
+            badgeCount = (isNaN(prevBadgeCount) ? 0 : prevBadgeCount) + parseInt(count)
+
+        $dropdownBadge.html(badgeCount < 100 ? badgeCount : '+99')
     }
 
     // EVENT HANDLERS
@@ -47,23 +77,31 @@
             $dropdown = $toggle.closest('.dropdown'),
             $itemMenu = $dropdown.find('[data-request-options]')
 
+        if (window.matchMedia('(max-width: 600px)'))
+            $('.sidebar, .nav-sidebar').collapse('hide')
+
         if (!$itemMenu.length)
             return;
 
         this.requestOptions($itemMenu)
     }
 
-    MainMenu.prototype.onRefreshOptions = function (event) {
+    MainMenu.prototype.onMarkOptionsAsRead = function (event) {
         var $toggle = $(event.target),
             $dropdown = $toggle.closest('.dropdown'),
-            $itemMenu = $dropdown.find('[data-request-options]')
+            $itemMenu =  $dropdown.find('[data-request-options]'),
+            $dropdownBadge = $dropdown.find('[data-toggle="dropdown"] .badge'),
+            itemName = $itemMenu.data('requestOptions')
 
         if (!$itemMenu.length)
             return;
 
-        $itemMenu.removeClass('is-loaded')
-
-        this.requestOptions($itemMenu)
+        $.request(this.options.alias + '::onMarkOptionsAsRead', {
+            data: {item: itemName}
+        }).done(function () {
+            $dropdownBadge.empty()
+            $itemMenu.find('.menu-item.active').removeClass('active')
+        })
     }
 
     MainMenu.DEFAULTS = {

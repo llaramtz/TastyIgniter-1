@@ -1,12 +1,12 @@
-<?php namespace Admin\Classes;
+<?php
+
+namespace Admin\Classes;
 
 use Html;
 
 /**
  * Menu item definition
  * A translation of the menu item configuration
- *
- * @package Admin
  */
 class MenuItem
 {
@@ -59,6 +59,8 @@ class MenuItem
      * @var array Contains a list of attributes specified in the item configuration.
      */
     public $badge;
+
+    public $badgeCount;
 
     /**
      * @var array Contains a list of attributes specified in the item configuration.
@@ -168,6 +170,9 @@ class MenuItem
         if (isset($config['badge']))
             $this->badge = $config['badge'];
 
+        if (isset($config['badgeCount']))
+            $this->badgeCount = $config['badgeCount'];
+
         if (isset($config['viewMoreUrl']))
             $this->viewMoreUrl = $config['viewMoreUrl'];
 
@@ -210,7 +215,7 @@ class MenuItem
 
         foreach ($attributes as $key => $value) {
             if ($key == 'href') $value = preg_match('#^(\w+:)?//#i', $value) ? $value : admin_url($value);
-            $attributes[$key] = (is_string($value) AND sscanf($value, 'lang:%s', $__line) === 1) ? lang($__line) : $value;
+            $attributes[$key] = is_lang_key($value) ? lang($value) : $value;
         }
 
         return $htmlBuild ? Html::attributes($attributes) : $attributes;
@@ -237,5 +242,22 @@ class MenuItem
         }
 
         return name_to_id($id);
+    }
+
+    public function unreadCount($value = null)
+    {
+        if (is_null($value)) {
+            if (is_callable($this->badgeCount)) {
+                $callable = $this->badgeCount;
+
+                return $callable();
+            }
+
+            return null;
+        }
+
+        $this->badgeCount = $value;
+
+        return $this;
     }
 }

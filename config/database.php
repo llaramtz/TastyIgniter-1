@@ -35,7 +35,7 @@ return [
 
         'sqlite' => [
             'driver' => 'sqlite',
-            'database' => database_path('database.sqlite'),
+            'database' => 'storage/database.sqlite',
             'prefix' => '',
         ],
 
@@ -76,6 +76,8 @@ return [
             'password' => 'password',
             'charset' => 'utf8',
             'prefix' => '',
+            'odbc' => TRUE,
+            'odbc_datasource_name' => 'your-odbc-dsn',
         ],
 
     ],
@@ -106,13 +108,25 @@ return [
 
     'redis' => [
 
-        'client' => 'predis',
+        'client' => 'phpredis',
+
+        'options' => [
+            'cluster' => 'redis',
+            'prefix' => 'tastyigniter_database_',
+        ],
 
         'default' => [
             'host' => '127.0.0.1',
             'password' => null,
             'port' => 6379,
             'database' => 0,
+        ],
+
+        'cache' => [
+            'host' => '127.0.0.1',
+            'password' => null,
+            'port' => 6379,
+            'database' => 1,
         ],
     ],
 ];

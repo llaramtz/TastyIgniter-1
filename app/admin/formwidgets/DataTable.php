@@ -1,6 +1,9 @@
-<?php namespace Admin\FormWidgets;
+<?php
+
+namespace Admin\FormWidgets;
 
 use Admin\Classes\BaseFormWidget;
+use Admin\Classes\FormField;
 use Admin\Widgets\Table;
 use Exception;
 use Illuminate\Database\Eloquent\Collection;
@@ -10,8 +13,6 @@ use Illuminate\Database\Eloquent\Collection;
  * Renders a table field.
  *
  * Adapted from october\backend\classes\DataTable
- *
- * @package Admin
  */
 class DataTable extends BaseFormWidget
 {
@@ -88,7 +89,7 @@ class DataTable extends BaseFormWidget
             unset($result[$key]['id']);
         }
 
-        return -1;
+        return $result ?: FormField::NO_SAVE_DATA;
     }
 
     /**

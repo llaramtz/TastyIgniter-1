@@ -1,4 +1,6 @@
-<?php namespace Main\Classes;
+<?php
+
+namespace Main\Classes;
 
 use Cache;
 use Config;
@@ -11,7 +13,6 @@ use SystemException;
 
 /**
  * MediaLibrary Class
- * @package System
  */
 class MediaLibrary
 {
@@ -74,7 +75,7 @@ class MediaLibrary
             Cache::put(
                 self::$cacheKey,
                 base64_encode(serialize($cached)),
-                Config::get('system.assets.media.ttl', 10)
+                Config::get('system.assets.media.ttl', now()->addMinutes(10))
             );
         }
 
@@ -274,9 +275,14 @@ class MediaLibrary
         if (!File::exists($filePath))
             $filePath = $this->getDefaultThumbPath($thumbPath, array_get($options, 'default'));
 
-        Manipulator::make($filePath)
-                   ->manipulate(array_except($options, ['extension', 'default']))
-                   ->save($thumbPath);
+        $manipulator = Manipulator::make($filePath)->useSource(
+            $this->getStorageDisk()->getDriver()
+        );
+
+        if ($manipulator->isSupported())
+            $manipulator->manipulate(array_except($options, ['extension', 'default']));
+
+        $manipulator->save($thumbPath);
 
         return asset($thumbPublicPath);
     }
@@ -284,7 +290,7 @@ class MediaLibrary
     public function getDefaultThumbPath($thumbPath, $default = null)
     {
         if ($default)
-            return $this->getStorageDisk()->path($this->getMediaRelativePath($default));
+            return $this->getStorageDisk()->path($this->getMediaPath($default));
 
         File::put($thumbPath, Manipulator::decodedBlankImage());
 
@@ -381,7 +387,7 @@ class MediaLibrary
 
     protected function sortFiles(&$files, $sortBy)
     {
-        list($by, $direction) = $sortBy;
+        [$by, $direction] = $sortBy;
         usort($files, function ($a, $b) use ($by) {
             switch ($by) {
                 case 'name':
@@ -472,7 +478,7 @@ class MediaLibrary
 
     protected function getMediaThumbFile($filePath, $options)
     {
-        $itemSignature = md5($filePath.serialize($options)).'_'.File::lastModified($filePath);
+        $itemSignature = md5($filePath.serialize($options)).'_'.@File::lastModified($filePath);
         $thumbFilename = 'thumb_'.
             $itemSignature.'_'.
             array_get($options, 'width').'x'.
@@ -481,6 +487,7 @@ class MediaLibrary
             File::extension($filePath);
 
         $partition = implode('/', array_slice(str_split($itemSignature, 3), 0, 3)).'/';
+
         return $this->getThumbDirectory().$partition.$thumbFilename;
     }
 

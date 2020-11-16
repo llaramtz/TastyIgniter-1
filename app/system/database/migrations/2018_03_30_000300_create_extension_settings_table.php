@@ -1,4 +1,6 @@
-<?php namespace System\Database\Migrations;
+<?php
+
+namespace System\Database\Migrations;
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -12,7 +14,7 @@ class CreateExtensionSettingsTable extends Migration
     public function up()
     {
         Schema::table('extensions', function (Blueprint $table) {
-            $table->string('version', 32)->nullable()->change();
+            $table->string('version', 32)->default('1.0.0')->nullable()->change();
         });
 
         Schema::create('extension_settings', function (Blueprint $table) {

@@ -1,4 +1,6 @@
-<?php namespace System\Classes;
+<?php
+
+namespace System\Classes;
 
 use Admin\Traits\WidgetMaker;
 use Exception;
@@ -8,7 +10,6 @@ use System\Traits\ViewMaker;
 
 /**
  * Controller Action base Class
- * @package System
  */
 class ControllerAction
 {
@@ -46,10 +47,11 @@ class ControllerAction
 
         // Add paths from the extension / module context
         $this->configPath = $this->controller->configPath;
+        $this->partialPath = $this->controller->partialPath;
 
         foreach ($this->requiredProperties as $property) {
             if (!isset($controller->{$property})) {
-                throw new Exception("Class ".get_class($controller)." must define property [{$property}] used by ".get_called_class());
+                throw new Exception('Class '.get_class($controller)." must define property [{$property}] used by ".get_called_class());
             }
         }
     }

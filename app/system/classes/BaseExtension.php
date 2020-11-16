@@ -9,7 +9,6 @@ use SystemException;
 
 /**
  * Base Extension Class
- * @package System
  */
 class BaseExtension extends ServiceProvider
 {
@@ -25,7 +24,7 @@ class BaseExtension extends ServiceProvider
     public $autoload = [];
 
     /**
-     * @var boolean Determine if this extension should be loaded (false) or not (true).
+     * @var bool Determine if this extension should be loaded (false) or not (true).
      */
     public $disabled = FALSE;
 
@@ -102,6 +101,16 @@ class BaseExtension extends ServiceProvider
     }
 
     /**
+     * Registers scheduled tasks that are executed on a regular basis.
+     *
+     * @param string $schedule
+     * @return void
+     */
+    public function registerSchedule($schedule)
+    {
+    }
+
+    /**
      * Registers any dashboard widgets provided by this extension.
      * @return array
      */
@@ -111,7 +120,7 @@ class BaseExtension extends ServiceProvider
     }
 
     /**
-     * Registers any form widgets implemented in this plugin.
+     * Registers any form widgets implemented in this extension.
      * The widgets must be returned in the following format:
      * ['className1' => 'alias'],
      * ['className2' => 'anotherAlias']
@@ -173,15 +182,7 @@ class BaseExtension extends ServiceProvider
                 'Create the file or override extensionMeta() method in the extension class.');
 
         $config = json_decode(File::get($configFile), TRUE) ?? [];
-        foreach ([
-                     'code',
-                     'name',
-                     'description',
-                     'version',
-                     'author',
-                     'icon',
-                 ] as $item) {
-
+        foreach (['code', 'name', 'description', 'author', 'icon'] as $item) {
             if (!array_key_exists($item, $config)) {
                 throw new SystemException(sprintf(
                     Lang::get('system::lang.missing.config_key'),

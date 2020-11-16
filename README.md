@@ -1,55 +1,67 @@
-TastyIgniter :fire:
-============
+<img src="https://tastyigniter.com/assets/ui/images/logos/tastyigniter-horizontal-logo-cropped.png">
 
-[![Packagist](https://img.shields.io/packagist/v/tastyigniter/TastyIgniter.svg?label=Packagist&style=flat-square)](https://packagist.org/packages/tastyigniter/TastyIgniter)
-[![Build Status](https://img.shields.io/travis/tastyigniter/TastyIgniter.svg?label=TravisCI&style=flat-square)](https://travis-ci.org/tastyigniter/TastyIgniter)
-[![License](https://img.shields.io/packagist/l/tastyigniter/TastyIgniter.svg?label=License&style=flat-square)](https://github.com/tastyigniter/TastyIgniter/blob/master/LICENSE)
+[![Stable](https://img.shields.io/packagist/v/tastyigniter/TastyIgniter.svg?label=Stable&style=flat-square)](https://packagist.org/packages/tastyigniter/TastyIgniter)
+[![Total Downloads](https://poser.pugx.org/tastyigniter/flame/downloads)](https://packagist.org/packages/tastyigniter/flame)
+![GitHub Workflow Status](https://img.shields.io/github/workflow/status/tastyigniter/TastyIgniter/Tests?label=Tests)
+[![Build Status](https://github.styleci.io/repos/7548986/shield?style=flat)](https://github.styleci.io/repos/16455664)
+[![License](https://img.shields.io/github/license/tastyigniter/TastyIgniter.svg?label=License&style=flat-square)](https://github.com/tastyigniter/TastyIgniter/blob/master/LICENSE.txt)
+[![Crowdin](https://badges.crowdin.net/tastyigniter/localized.svg)](https://crowdin.com/project/tastyigniter)
+[![Twitter](https://img.shields.io/twitter/follow/TastyIgniter.svg?label=Follow)](https://twitter.com/TastyIgniter)
 
-[TastyIgniter](https://tastyigniter.com/) is a free open source restaurant ordering and management system. TastyIgniter provides a professional and reliable platform for restaurants wanting to offer online ordering to their customers.
+[TastyIgniter](https://tastyigniter.com/) is a food ordering and restaurant management system. TastyIgniter provides a professional and reliable platform for restaurants wanting to offer online ordering to their customers.
 
-## Installation
-> **TastyIgniter v3 (uses [Laravel](https://laravel.com/) PHP framework) is currently in beta and should not be used in production.** Join the [Dev Team](http://slack.tastyigniter.com/) to follow along with our progress. See branch [2.1.x](https://github.com/tastyigniter/TastyIgniter/tree/2.1.x) for a stable version.
+![screenshot](https://tastyigniter.com/assets/ui/images/mockups/Menus.png)
 
-### Wizard Installation
-1. Download and unzip the [setup archive file](https://tastyigniter.com/download) into an empty directory on your server.
-2. Create a MySQL user database for TastyIgniter.
-3. Extract and upload the setup archive contents to your server. Normally the setup.php file will be at your root.
-4. Grant write permissions on the setup directory, its subdirectories and files.
-4. Run the TastyIgniter setup script by accessing setup.php in your web browser. Example, http://example.com/setup.php or http://example.com/folder/setup.php
-5. Follow all onscreen instructions and make sure all installation requirements are checked.
+### Documentation
+The best place to learn TastyIgniter is by reading the [documentation](https://tastyigniter.com/docs)
 
-### Manual Installation
+### Installation
+Please read the [Installation Guide](https://tastyigniter.com/docs/installation) for more information.
 
-```
-composer create-project tastyigniter/tastyigniter .
-```
+### Questions
+For questions and support please use the [Community Forum](https://forum.tastyigniter.com) or [Join us on Slack](http://tastyigniter.com/slack). 
 
-After running the above command, run the install command
+### Issues
+Please report bugs using the [GitHub issue tracker](https://github.com/tastyigniter/TastyIgniter/issues)
 
-```
-php artisan igniter:install
-```
-
-The install command will guide you through the process of setting up TastyIgniter for the first time. 
-It will ask for the database configuration, application URL and administrator details.
-
-Read the [Installation Guide](https://docs.tastyigniter.com/installation) for more information.
-
-## Community and Support
-- Please report bugs using the [GitHub issue tracker](https://github.com/tastyigniter/TastyIgniter/issues), or better yet, fork the repo and submit a pull request.
-- Visit the [Community Forum](https://forum.tastyigniter.com) or [Documentation](https://docs.tastyigniter.com) for support.
+### Stay in touch
 - [Follow us on Twitter](https://twitter.com/tastyigniter/) for announcements and updates.
-- [Join us on Slack](http://slack.tastyigniter.com/) to chat with us.
+- [Blog](https://tastyigniter.com/blog) for tips and latest developments in the food industry.
 
 ## Contributing
-TastyIgniter is open-source and we would love your help building it! Please read the [Contributing Guidelines](CONTRIBUTING.md) to learn how you can help.
+We would love your help building TastyIgniter! Please read the [Contributing Guidelines](CONTRIBUTING.md) to learn how you can help.
 
-## Credits
-- Laravel - Open source full-stack framework.
-- october/rain - OctoberCMS foundation library
-- Bootstrap 4 - Open source front end framework.
-- [Samuel Adepoyigi](https://github.com/sampoyigi)
-- [All Contributors](https://github.com/tastyigniter/TastyIgniter/contributors)
+Thank you to all the people who already contributed to TastyIgniter!
+
+<a href="https://github.com/tastyigniter/TastyIgniter/graphs/contributors"><img src="https://opencollective.com/tastyigniter/contributors.svg?width=890&button=false" /></a>
+
+## Supporting TastyIgniter
+TastyIgniter is an MIT-licensed community-driven project with its continuous development made possible by the support of these awesome [backers](#contributing). If you'd like to help support the future of the project, please consider:
+1. Donating development time to the project.
+2. Spreading the word about TastyIgniter.
+3. Becoming a sponsor by donating funds (see below).
+
+## Sponsors
+Become a sponsor and get your logo on our README on Github with a link to your site. 
+
+### via Open Collective
+<a href="https://opencollective.com/tastyigniter" target="_blank" rel="noopener noreferrer"><img src="https://opencollective.com/tastyigniter/sponsors.svg"></a>
+
+<a href="https://opencollective.com/tastyigniter" target="_blank" rel="noopener noreferrer"><img src="https://opencollective.com/tastyigniter/backers.svg"></a>
+
+### via Patreon
+[[Become a Patreon sponsor](https://www.patreon.com/sampoyigi)]
+
+## Built With :heart:
+- Laravel full-stack PHP framework
+- OctoberCMS foundation library
+- Bootstrap 4 front-end framework
+
+## Author
+TastyIgniter was created by [Samuel Adepoyigi](https://github.com/sampoyigi).
+
+## Security Vulnerabilities
+If you discover a security vulnerability within TastyIgniter, please send an e-mail to support@tastyigniter.com.
 
 ## License
 Starting with version 3.0.0 TastyIgniter is licensed under the [The MIT License (MIT)](https://tastyigniter.com/licence/). Older versions were GPL-licensed.

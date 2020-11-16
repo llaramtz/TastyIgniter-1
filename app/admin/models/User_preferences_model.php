@@ -1,4 +1,6 @@
-<?php namespace Admin\Models;
+<?php
+
+namespace Admin\Models;
 
 use AdminAuth;
 use Exception;
@@ -14,6 +16,7 @@ class User_preferences_model extends Model
     public $timestamps = FALSE;
 
     public $casts = [
+        'user_id' => 'integer',
         'value' => 'json',
     ];
 
@@ -27,7 +30,7 @@ class User_preferences_model extends Model
     public static function onUser($user = null)
     {
         $self = new static;
-        $self->userContext = $user ?: $self->resolveUser($user);
+        $self->userContext = $user ?: $self->resolveUser();
 
         return $self;
     }
@@ -37,7 +40,7 @@ class User_preferences_model extends Model
         return static::applyItemAndUser($item, $user)->first();
     }
 
-    public function resolveUser($user)
+    public function resolveUser()
     {
         $user = AdminAuth::getUser();
         if (!$user) {

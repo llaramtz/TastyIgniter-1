@@ -1,4 +1,6 @@
-<?php namespace System\DashboardWidgets;
+<?php
+
+namespace System\DashboardWidgets;
 
 use Admin\Classes\BaseDashboardWidget;
 use DOMDocument;
@@ -45,6 +47,6 @@ class News extends BaseDashboardWidget
 
     public function createRssDocument()
     {
-        return new DOMDocument();
+        return class_exists('DOMDocument', FALSE) ? new DOMDocument() : null;
     }
 }

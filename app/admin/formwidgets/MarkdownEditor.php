@@ -3,13 +3,11 @@
 namespace Admin\FormWidgets;
 
 use Admin\Classes\BaseFormWidget;
-use October\Rain\Parse\Markdown;
+use Igniter\Flame\Mail\Markdown;
 
 /**
  * Code Editor
  * Renders a code editor field.
- *
- * @package Admin
  */
 class MarkdownEditor extends BaseFormWidget
 {
@@ -56,9 +54,9 @@ class MarkdownEditor extends BaseFormWidget
 
     public function loadAssets()
     {
-        $this->addCss('vendor/editormd/css/editormd.css', 'editormd-css');
+        $this->addCss('vendor/easymde/easymde.min.css', 'easymde-css');
         $this->addCss('css/markdowneditor.css', 'markdowneditor-css');
-        $this->addJs('vendor/editormd/editormd.min.js', 'editormd-js');
+        $this->addJs('vendor/easymde/easymde.min.js', 'easymde-js');
         $this->addJs('js/markdowneditor.js', 'markdowneditor-js');
     }
 

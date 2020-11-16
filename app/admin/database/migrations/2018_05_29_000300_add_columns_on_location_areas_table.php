@@ -1,4 +1,6 @@
-<?php namespace Admin\Database\Migrations;
+<?php
+
+namespace Admin\Database\Migrations;
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -19,9 +21,5 @@ class AddColumnsOnLocationAreasTable extends Migration
 
     public function down()
     {
-        Schema::table('location_areas', function (Blueprint $table) {
-            $table->dropColumn('color');
-            $table->dropColumn('is_default');
-        });
     }
 }

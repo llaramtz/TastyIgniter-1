@@ -1,17 +1,24 @@
-<?php namespace System\Models;
+<?php
 
-use File;
+namespace System\Models;
+
+use Exception;
+use Igniter\Flame\Database\Traits\Purgeable;
+use Igniter\Flame\Exception\ApplicationException;
 use Main\Classes\Theme;
 use Main\Classes\ThemeManager;
+use Main\Template\Layout;
 use Model;
-use URL;
+use System\Classes\ComponentManager;
+use System\Classes\ExtensionManager;
 
 /**
  * Themes Model Class
- * @package System
  */
 class Themes_model extends Model
 {
+    use Purgeable;
+
     /**
      * @var array data cached array
      */
@@ -27,11 +34,15 @@ class Themes_model extends Model
      */
     protected $primaryKey = 'theme_id';
 
-    protected $fillable = ['name', 'code', 'version', 'description'];
+    protected $fillable = ['theme_id', 'name', 'code', 'version', 'description', 'data', 'status'];
 
     public $casts = [
         'data' => 'serialize',
+        'status' => 'boolean',
+        'is_default' => 'boolean',
     ];
+
+    protected $purgeable = ['template', 'settings', 'markup', 'codeSection'];
 
     /**
      * @var ThemeManager
@@ -42,6 +53,10 @@ class Themes_model extends Model
      * @var \Main\Classes\Theme
      */
     public $themeClass;
+
+    protected $fieldConfig;
+
+    protected $fieldValues = [];
 
     public static function forTheme(Theme $theme)
     {
@@ -55,11 +70,97 @@ class Themes_model extends Model
         return self::$instances[$dirName] = $instance;
     }
 
+    public static function onboardingIsComplete()
+    {
+        if (!$code = params('default_themes.main'))
+            return FALSE;
+
+        if (!$model = self::where('code', $code)->first())
+            return FALSE;
+
+        return !is_null($model->data);
+    }
+
+    public function getLayoutOptions()
+    {
+        return Layout::getDropdownOptions($this->getTheme(), TRUE);
+    }
+
+    public static function getComponentOptions()
+    {
+        $components = [];
+        $manager = ComponentManager::instance();
+        foreach ($manager->listComponents() as $code => $definition) {
+            try {
+                $componentObj = $manager->makeComponent($code, null, $definition);
+
+                if ($componentObj->isHidden) continue;
+
+                $components[$code] = [$definition['name'], lang($definition['description'])];
+            }
+            catch (Exception $ex) {
+            }
+        }
+
+        return $components;
+    }
+
+    //
+    // Accessors & Mutators
+    //
+
+    public function getNameAttribute($value)
+    {
+        return optional($this->getTheme())->label ?? $value;
+    }
+
+    public function getDescriptionAttribute($value)
+    {
+        return optional($this->getTheme())->description ?? $value;
+    }
+
+    public function getVersionAttribute($value = null)
+    {
+        return $value ?? '0.1.0';
+    }
+
+    public function getAuthorAttribute($value)
+    {
+        return optional($this->getTheme())->author ?? $value;
+    }
+
+    public function getLockedAttribute()
+    {
+        return $this->getTheme()->locked;
+    }
+
+    public function getScreenshotAttribute()
+    {
+        return $this->getTheme()->screenshot;
+    }
+
+    public function setAttribute($key, $value)
+    {
+        if (!$this->isFillable($key)) {
+            $this->fieldValues[$key] = $value;
+        }
+        else {
+            parent::setAttribute($key, $value);
+        }
+    }
+
     //
     // Events
     //
 
-    public function afterFetch()
+    protected function beforeSave()
+    {
+        if ($this->fieldValues) {
+            $this->data = $this->fieldValues;
+        }
+    }
+
+    protected function afterFetch()
     {
         $this->applyThemeManager();
     }
@@ -79,7 +180,7 @@ class Themes_model extends Model
 
     /**
      * Attach the theme object to this class
-     * @return boolean
+     * @return bool
      */
     public function applyThemeManager()
     {
@@ -93,13 +194,8 @@ class Themes_model extends Model
             return FALSE;
         }
 
-        $themePath = File::localToPublic($themeClass->getPath());
-        $themeClass->screenshot = URL::asset($themePath.'/screenshot.png');
-
         $this->manager = $themeManager;
         $this->themeClass = $themeClass;
-
-        $this->description = !strlen($this->description) ? $themeClass->description : $this->description;
 
         return TRUE;
     }
@@ -109,11 +205,19 @@ class Themes_model extends Model
         return $this->manager;
     }
 
+    public function getTheme()
+    {
+        return $this->themeClass;
+    }
+
     public function getFieldsConfig()
     {
+        if (!is_null($this->fieldConfig))
+            return $this->fieldConfig;
+
         $fields = [];
-        $customizeConfig = $this->themeClass->getConfigValue('form', []);
-        foreach ($customizeConfig as $section => $item) {
+        $formConfig = $this->getTheme()->getFormConfig();
+        foreach ($formConfig as $section => $item) {
             foreach (array_get($item, 'fields', []) as $name => $field) {
                 if (!isset($field['tab']))
                     $field['tab'] = $item['title'];
@@ -122,7 +226,7 @@ class Themes_model extends Model
             }
         }
 
-        return $fields;
+        return $this->fieldConfig = $fields;
     }
 
     public function getFieldValues()
@@ -133,14 +237,14 @@ class Themes_model extends Model
     public function getThemeData()
     {
         $data = [];
-        $customizeConfig = $this->themeClass->getConfigValue('form', []);
-        foreach ($customizeConfig as $section => $item) {
+        $formConfig = $this->getTheme()->getFormConfig();
+        foreach ($formConfig as $section => $item) {
             foreach (array_get($item, 'fields', []) as $name => $field) {
-                $data[$name] = array_get($field, 'default');
+                $data[$name] = array_get($this->data, $name, array_get($field, 'default'));
             }
         }
 
-        return array_merge($data, $this->data ?? []);
+        return $data;
     }
 
     //
@@ -149,35 +253,28 @@ class Themes_model extends Model
 
     public static function syncAll()
     {
-        $themes = self::get();
-
         $installedThemes = [];
         $themeManager = ThemeManager::instance();
         foreach ($themeManager->paths() as $code => $path) {
+            if (!($themeObj = $themeManager->findTheme($code))) continue;
 
-            if (!($themeClass = $themeManager->findTheme($code))) continue;
-
-            $themeMeta = (object)$themeClass;
-            $installedThemes[] = $name = $themeMeta->name ?? $code;
+            $installedThemes[] = $name = $themeObj->name ?? $code;
 
             // Only add themes whose meta code match their directory name
-            // or theme has no record
-            if (
-                $code != $name OR
-                $extension = $themes->where('code', $name)->first()
-            ) continue;
+            if ($code != $name) continue;
 
-            self::create([
-                'name' => $themeMeta->label ?? title_case($code),
-                'code' => $name,
-                'version' => $themeMeta->version ?? '1.0.0',
-                'description' => $themeMeta->description ?? '',
-            ]);
+            $theme = self::firstOrNew(['code' => $name]);
+            $theme->name = $themeObj->label ?? title_case($code);
+            $theme->code = $name;
+            $theme->version = $theme->version ?? '0.1.0';
+            $theme->description = $themeObj->description ?? '';
+            $theme->save();
         }
 
         // Disable themes not found in file system
         // This allows admin to remove an enabled theme from admin UI after deleting files
         self::whereNotIn('code', $installedThemes)->update(['status' => FALSE]);
+        self::whereIn('code', $installedThemes)->update(['status' => TRUE]);
 
         self::updateInstalledThemes();
     }
@@ -187,7 +284,7 @@ class Themes_model extends Model
      */
     public static function updateInstalledThemes()
     {
-        $installedThemes = self::select('status', 'name')->lists('status', 'code')->all();
+        $installedThemes = self::select('status', 'code')->lists('status', 'code')->all();
 
         if (!is_array($installedThemes))
             $installedThemes = [];
@@ -212,12 +309,23 @@ class Themes_model extends Model
         if (empty($code) OR !$theme = self::whereCode($code)->first())
             return FALSE;
 
+        $extensionManager = ExtensionManager::instance();
+
+        $notFound = [];
+        foreach ($theme->getTheme()->requires as $require => $version) {
+            if (!$extensionManager->hasExtension($require)) {
+                $notFound[] = $require;
+            }
+            else {
+                $extensionManager->installExtension($require);
+            }
+        }
+
+        if (count($notFound))
+            throw new ApplicationException(sprintf('The following required extensions must be installed before activating this theme, %s', implode(', ', $notFound)));
+
         params()->set('default_themes.main', $theme->code);
         params()->save();
-
-        foreach ($theme->themeClass->requires as $require => $version) {
-            Extensions_model::install($require);
-        }
 
         return $theme;
     }
@@ -241,5 +349,26 @@ class Themes_model extends Model
         $filesDeleted = ThemeManager::instance()->removeTheme($themeCode);
 
         return $filesDeleted;
+    }
+
+    public static function generateUniqueCode($code, $suffix = null)
+    {
+        do {
+            $uniqueCode = $code.($suffix ? '-'.$suffix : '');
+            $suffix = strtolower(str_random('3'));
+        } while (self::themeCodeExists($uniqueCode)); // Already in the DB? Fail. Try again
+
+        return $uniqueCode;
+    }
+
+    /**
+     * Checks whether a code exists in the database or not
+     *
+     * @param string $uniqueCode
+     * @return bool
+     */
+    protected static function themeCodeExists($uniqueCode)
+    {
+        return self::where('code', '=', $uniqueCode)->limit(1)->count() > 0;
     }
 }

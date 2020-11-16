@@ -1,7 +1,11 @@
-<?php namespace System\Libraries;
+<?php
+
+namespace System\Libraries;
 
 use File;
 use Html;
+use JsonSerializable;
+use stdClass;
 use System\Traits\CombinesAssets;
 
 /**
@@ -10,7 +14,6 @@ use System\Traits\CombinesAssets;
  * Within controllers, widgets, components and views, use facade:
  *   Assets::addCss($path, $options);
  *   Assets::addJs($path, $options);
- * @package System
  */
 class Assets
 {
@@ -20,7 +23,9 @@ class Assets
 
     protected static $registeredCallback = [];
 
-    protected $assets = ['icon' => [], 'meta' => [], 'js' => [], 'css' => []];
+    protected $assets = ['icon' => [], 'meta' => [], 'js' => [], 'css' => [], 'jsVars' => []];
+
+    protected $jsVarNamespace = 'app';
 
     public function __construct()
     {
@@ -59,7 +64,7 @@ class Assets
     {
         $assetsConfigPath = base_path().$this->getAssetPath($path);
         if (!File::exists($assetsConfigPath))
-            return FALSE;
+            return;
 
         $content = json_decode(File::get($assetsConfigPath), TRUE);
         if ($bundles = array_get($content, 'bundles')) {
@@ -119,7 +124,8 @@ class Assets
                 $href = $href['href'];
             }
 
-            $attributes['href'] = asset($href);
+            $attributes['href'] = asset($this->prepUrl($href));
+
             return '<link'.Html::attributes($attributes).'>'.PHP_EOL;
         }, $this->assets['icon']);
 
@@ -146,6 +152,23 @@ class Assets
     public function getJs()
     {
         return $this->getAsset('js');
+    }
+
+    public function getJsVars()
+    {
+        if (!$this->assets['jsVars'])
+            return '';
+
+        $output = "window.{$this->jsVarNamespace} = window.{$this->jsVarNamespace} || {};";
+
+        $output .= collect($this->assets['jsVars'])->map(function ($value, $name) {
+            $value = is_object($value)
+                ? $this->transformJsObjectVar($value) : $this->transformJsVar($value);
+
+            return "{$this->jsVarNamespace}.{$name} = {$value};";
+        })->implode('');
+
+        return "<script>{$output}</script>";
     }
 
     public function addFavIcon($icon)
@@ -176,9 +199,14 @@ class Assets
         return $this;
     }
 
+    public function putJsVars(array $variables)
+    {
+        $this->assets['jsVars'] = array_merge($this->assets['jsVars'], $variables);
+    }
+
     public function flush()
     {
-        $this->assets = ['meta' => [], 'js' => [], 'css' => []];
+        $this->assets = ['icon' => [], 'meta' => [], 'js' => [], 'css' => [], 'jsVars' => []];
     }
 
     protected function putAsset($type, $path, $attributes)
@@ -193,7 +221,8 @@ class Assets
             return null;
 
         if ($this->combineAssets) {
-            $path = $this->combine($type, $this->getAssetPaths($assets));
+            $path = $this->combine($type, $this->getPathsFromAssets($assets));
+
             return $this->buildAssetUrl($type, $path);
         }
 
@@ -216,7 +245,7 @@ class Assets
         return $name;
     }
 
-    protected function getAssetPaths($assets)
+    protected function getPathsFromAssets($assets)
     {
         $result = [];
         foreach ($assets as $asset) {
@@ -285,19 +314,40 @@ class Assets
 
         if ($type == 'js') {
             $html = '<script'.Html::attributes(array_merge([
-                    'charset' => strtolower(setting('charset', 'UTF-8')),
-                    'type' => 'text/javascript',
-                    'src' => asset($file)
-                ], $attributes)).'></script>'.PHP_EOL;
+                'charset' => strtolower(setting('charset', 'UTF-8')),
+                'type' => 'text/javascript',
+                'src' => asset($file),
+            ], $attributes)).'></script>'.PHP_EOL;
         }
         else {
             $html = '<link'.Html::attributes(array_merge([
-                    'rel' => 'stylesheet',
-                    'type' => 'text/css',
-                    'href' => asset($file)
-                ], $attributes)).'>'.PHP_EOL;
+                'rel' => 'stylesheet',
+                'type' => 'text/css',
+                'href' => asset($file),
+            ], $attributes)).'>'.PHP_EOL;
         }
 
         return $html;
+    }
+
+    protected function transformJsVar($value)
+    {
+        return json_encode($value);
+    }
+
+    protected function transformJsObjectVar($value)
+    {
+        if ($value instanceof JsonSerializable OR $value instanceof StdClass)
+            return json_encode($value);
+
+        // If a toJson() method exists, the object can cast itself automatically.
+        if (method_exists($value, 'toJson'))
+            return $value;
+
+        // Otherwise, if the object doesn't even have a __toString() method, we can't proceed.
+        if (!method_exists($value, '__toString'))
+            throw new \Exception('Cannot transform this object to JavaScript.');
+
+        return "'{$value}'";
     }
 }

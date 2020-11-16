@@ -1,4 +1,6 @@
-<?php namespace System\Console\Commands;
+<?php
+
+namespace System\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Console\ConfirmableTrait;
@@ -31,13 +33,9 @@ class IgniterDown extends Command
             return;
         }
 
-        $manager = UpdateManager::instance()->resetLogs()->down();
-
-        $this->output->writeln('<info>Migrating application and extensions...</info>');
-
-        foreach ($manager->getLogs() as $note) {
-            $this->output->writeln($note);
-        }
+        $manager = UpdateManager::instance();
+        $manager->setLogsOutput($this->output);
+        $manager->down();
     }
 
     /**

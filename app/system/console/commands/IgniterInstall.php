@@ -9,6 +9,7 @@ use Igniter\Flame\Support\ConfigRewrite;
 use Illuminate\Console\Command;
 use Symfony\Component\Console\Input\InputOption;
 use System\Classes\UpdateManager;
+use System\Database\Seeds\DatabaseSeeder;
 
 /**
  * Console command to install TastyIgniter.
@@ -61,23 +62,18 @@ class IgniterInstall extends Command
 
         $this->rewriteConfigFiles();
 
-        $this->migrateDatabase();
+        $this->setSeederProperties();
 
-        $this->createDefaultLocation();
+        $this->migrateDatabase();
 
         $this->createSuperUser();
 
         $this->addSystemValues();
 
-        $this->alert('INSTALLATION COMPLETE');
-    }
+        $this->moveExampleFile('htaccess', null, 'backup');
+        $this->moveExampleFile('htaccess', 'example', null);
 
-    /**
-     * Get the console command arguments.
-     */
-    protected function getArguments()
-    {
-        return [];
+        $this->alert('INSTALLATION COMPLETE');
     }
 
     /**
@@ -120,44 +116,44 @@ class IgniterInstall extends Command
 
         DB::purge();
 
-        $manager = UpdateManager::instance()->resetLogs();
+        $manager = UpdateManager::instance()->setLogsOutput($this->output);
 
         $manager->update();
-
-        foreach ($manager->getLogs() as $note) {
-            $this->output->writeln($note);
-        }
 
         $this->line('Done. Migrating application and extensions...');
     }
 
-    protected function createDefaultLocation()
+    protected function setSeederProperties()
     {
-        $siteName = $this->ask('Site Name', 'TastyIgniter');
+        $siteName = $this->ask('Site Name', DatabaseSeeder::$siteName);
         $this->writeToConfig('app', ['name' => $siteName]);
 
-        $url = $this->ask('Site URL', Config::get('app.url'));
-        $this->writeToConfig('app', ['url' => $url]);
+        $siteUrl = $this->ask('Site URL', Config::get('app.url'));
+        $this->writeToConfig('app', ['url' => $siteUrl]);
 
-        \Admin\Models\Locations_model::insert(['location_name' => $siteName]);
-        $this->line('Location '.$siteName.' created!');
+        DatabaseSeeder::$seedDemo = $this->confirm('Install demo data?', DatabaseSeeder::$seedDemo);
+
+        DatabaseSeeder::$siteName = $siteName;
+        DatabaseSeeder::$siteUrl = $siteUrl;
+        DatabaseSeeder::$siteEmail = $this->ask('Admin Email', DatabaseSeeder::$siteEmail);
+        DatabaseSeeder::$staffName = $this->ask('Admin Name', DatabaseSeeder::$staffName);
     }
 
     protected function createSuperUser()
     {
-        $name = $this->ask('Admin Name', 'Chef Sam');
-        $email = $this->ask('Admin Email', 'admin@domain.tld');
         $username = $this->ask('Admin Username', 'admin');
         $password = $this->ask('Admin Password', '123456');
 
-        $staff = \Admin\Models\Staffs_model::firstOrNew(['staff_email' => $email]);
-        $staff->staff_name = $name;
-        $staff->staff_group_id = \Admin\Models\Staff_groups_model::first()->staff_group_id;
-        $staff->staff_location_id = \Admin\Models\Locations_model::first()->location_id;
+        $staff = \Admin\Models\Staffs_model::firstOrNew(['staff_email' => DatabaseSeeder::$siteEmail]);
+        $staff->staff_name = DatabaseSeeder::$staffName;
+        $staff->staff_role_id = \Admin\Models\Staff_roles_model::first()->staff_role_id;
         $staff->language_id = \System\Models\Languages_model::first()->language_id;
         $staff->timezone = FALSE;
         $staff->staff_status = TRUE;
         $staff->save();
+
+        $staff->groups()->attach(\Admin\Models\Staff_groups_model::first()->staff_group_id);
+        $staff->locations()->attach(\Admin\Models\Locations_model::first()->location_id);
 
         $user = \Admin\Models\Users_model::firstOrNew(['username' => $username]);
         $user->staff_id = $staff->staff_id;
@@ -172,12 +168,24 @@ class IgniterInstall extends Command
 
     protected function addSystemValues()
     {
+        params()->flushCache();
+
         params()->set([
             'ti_setup' => 'installed',
             'default_location_id' => \Admin\Models\Locations_model::first()->location_id,
         ]);
 
-        // These parameter are no longer in use
+        params()->save();
+
+        setting()->flushCache();
+        setting()->set('site_name', DatabaseSeeder::$siteName);
+        setting()->set('site_email', DatabaseSeeder::$siteEmail);
+        setting()->set('sender_name', DatabaseSeeder::$siteName);
+        setting()->set('sender_email', DatabaseSeeder::$siteEmail);
+        setting()->set('customer_group_id', \Admin\Models\Customer_groups_model::first()->customer_group_id);
+        setting()->save();
+
+        // These parameters are no longer in use
         params()->forget('main_address');
 
         UpdateManager::instance()->setCoreVersion();
@@ -205,5 +213,13 @@ class IgniterInstall extends Command
     protected function generateEncryptionKey()
     {
         return 'base64:'.base64_encode(random_bytes(32));
+    }
+
+    protected function moveExampleFile($name, $old, $new)
+    {
+        // /$old.$name => /$new.$name
+        if (file_exists(base_path().'/'.$old.'.'.$name)) {
+            rename(base_path().'/'.$old.'.'.$name, base_path().'/'.$new.'.'.$name);
+        }
     }
 }

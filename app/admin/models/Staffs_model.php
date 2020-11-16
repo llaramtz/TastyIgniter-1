@@ -1,11 +1,13 @@
-<?php namespace Admin\Models;
+<?php
 
+namespace Admin\Models;
+
+use Admin\Classes\UserState;
 use Igniter\Flame\Database\Traits\Purgeable;
 use Model;
 
 /**
  * Staffs Model Class
- * @package Admin
  */
 class Staffs_model extends Model
 {
@@ -30,25 +32,36 @@ class Staffs_model extends Model
      */
     public $timestamps = TRUE;
 
-    protected $fillable = ['staff_name', 'staff_email', 'staff_group_id', 'staff_location_id', 'timezone',
-        'language_id', 'date_added', 'staff_status'];
+    protected $guarded = [];
+
+    public $casts = [
+        'staff_role_id' => 'integer',
+        'staff_location_id' => 'integer',
+        'sale_permission' => 'integer',
+        'language_id' => 'integer',
+        'staff_status' => 'boolean',
+    ];
 
     public $relation = [
         'hasOne' => [
-            'user' => ['Admin\Models\Users_model', 'foreignKey' => 'staff_id', 'otherKey' => 'staff_id'],
+            'user' => ['Admin\Models\Users_model', 'foreignKey' => 'staff_id', 'otherKey' => 'staff_id', 'delete' => TRUE],
+        ],
+        'hasMany' => [
+            'assignable_logs' => ['Admin\Models\Assignable_logs_model', 'foreignKey' => 'assignee_id'],
         ],
         'belongsTo' => [
-            'group' => ['Admin\Models\Staff_groups_model', 'foreignKey' => 'staff_group_id'],
-            'location' => ['Admin\Models\Locations_model', 'foreignKey' => 'staff_location_id'],
+            'role' => ['Admin\Models\Staff_roles_model', 'foreignKey' => 'staff_role_id'],
             'language' => ['System\Models\Languages_model'],
+        ],
+        'belongsToMany' => [
+            'groups' => ['Admin\Models\Staff_groups_model', 'table' => 'staffs_groups'],
+            'locations' => ['Admin\Models\Locations_model', 'table' => 'staffs_locations'],
         ],
     ];
 
     protected $hidden = ['password'];
 
-    protected $purgeable = ['user'];
-
-    protected $with = ['group'];
+    protected $purgeable = ['user', 'groups', 'locations'];
 
     public function getFullNameAttribute($value)
     {
@@ -78,16 +91,29 @@ class Staffs_model extends Model
         return $query->where('staff_status', 1);
     }
 
+    public function scopeWhereNotSuperUser($query)
+    {
+        $query->whereHas('user', function ($q) {
+            $q->where('super_user', '!=', 1);
+        });
+    }
+
     //
     // Events
     //
 
-    public function afterSave()
+    protected function afterSave()
     {
         $this->restorePurgedValues();
 
         if (array_key_exists('user', $this->attributes))
             $this->addStaffUser($this->attributes['user']);
+
+        if (array_key_exists('groups', $this->attributes))
+            $this->addStaffGroups($this->attributes['groups']);
+
+        if (array_key_exists('locations', $this->attributes))
+            $this->addStaffLocations($this->attributes['locations']);
     }
 
     //
@@ -125,6 +151,30 @@ class Staffs_model extends Model
     }
 
     /**
+     * Create a new or update existing staff locations
+     *
+     * @param array $locations
+     *
+     * @return bool
+     */
+    public function addStaffLocations($locations = [])
+    {
+        return $this->locations()->sync($locations);
+    }
+
+    /**
+     * Create a new or update existing staff groups
+     *
+     * @param array $groups
+     *
+     * @return bool
+     */
+    public function addStaffGroups($groups = [])
+    {
+        return $this->groups()->sync($groups);
+    }
+
+    /**
      * Send email to staff
      *
      * @param string $email
@@ -136,5 +186,29 @@ class Staffs_model extends Model
     public function sendMail($email, $template, $data = [])
     {
         return Users_model::sendMail($email, $template, $data);
+    }
+
+    //
+    //
+    //
+
+    public function canAssignTo()
+    {
+        return !UserState::forUser($this->user)->isAway();
+    }
+
+    public function hasGlobalAssignableScope()
+    {
+        return $this->sale_permission === 1;
+    }
+
+    public function hasGroupAssignableScope()
+    {
+        return $this->sale_permission === 2;
+    }
+
+    public function hasRestrictedAssignableScope()
+    {
+        return $this->sale_permission === 3;
     }
 }

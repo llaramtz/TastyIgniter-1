@@ -1,9 +1,12 @@
-<?php namespace Admin\DashboardWidgets;
+<?php
+
+namespace Admin\DashboardWidgets;
 
 use Admin\Classes\BaseDashboardWidget;
 use Admin\Models\Customers_model;
 use Admin\Models\Orders_model;
 use Admin\Models\Reservations_model;
+use Carbon\Carbon;
 
 /**
  * Statistic dashboard widget.
@@ -14,12 +17,6 @@ class Statistics extends BaseDashboardWidget
      * @var string A unique alias to identify this widget.
      */
     protected $defaultAlias = 'statistics';
-
-    public function initialize()
-    {
-        $color = $this->getContextColor($this->property('context'));
-        $this->setProperty('cssClass', 'text-white bg-'.$color.' border-'.$color);
-    }
 
     /**
      * Renders the widget.
@@ -59,48 +56,51 @@ class Statistics extends BaseDashboardWidget
         return [
             'sale' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_sale',
-                'icon' => 'fa fa-line-chart',
-                'color' => 'success',
+                'icon' => ' bg-success text-white fa fa-line-chart',
             ],
             'lost_sale' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_lost_sale',
-                'icon' => 'fa fa-line-chart fa-rotate-180',
-                'color' => 'danger',
+                'icon' => ' bg-danger text-white fa fa-line-chart fa-rotate-180',
             ],
             'cash_payment' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_cash_payment',
-                'icon' => 'fa fa-money-bill',
-                'color' => 'warning',
+                'icon' => ' bg-warning text-white fa fa-money-bill',
             ],
             'customer' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_customer',
-                'icon' => 'fa fa-users',
-                'color' => 'info',
+                'icon' => ' bg-info text-white fa fa-users',
             ],
             'order' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_order',
-                'icon' => 'fa fa-shopping-cart',
-                'color' => 'success',
+                'icon' => ' bg-success text-white fa fa-shopping-cart',
             ],
             'delivery_order' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_delivery_order',
-                'icon' => 'fa fa-truck',
-                'color' => 'primary',
+                'icon' => ' bg-primary text-white fa fa-truck',
             ],
             'collection_order' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_collection_order',
-                'icon' => 'fa fa-shopping-bag',
-                'color' => 'info',
+                'icon' => ' bg-info text-white fa fa-shopping-bag',
             ],
             'completed_order' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_completed_order',
-                'icon' => 'fa fa-receipt',
-                'color' => 'success',
+                'icon' => ' bg-success text-white fa fa-receipt',
             ],
             'reserved_table' => [
                 'label' => 'lang:admin::lang.dashboard.text_total_reserved_table',
-                'icon' => 'fa fa-table',
-                'color' => 'primary',
+                'icon' => ' bg-primary text-white fa fa-table',
+            ],
+            'reserved_guest' => [
+                'label' => 'lang:admin::lang.dashboard.text_total_reserved_guest',
+                'icon' => ' bg-primary text-white fa fa-table',
+            ],
+            'reservation' => [
+                'label' => 'lang:admin::lang.dashboard.text_total_reservation',
+                'icon' => ' bg-success text-white fa fa-table',
+            ],
+            'completed_reservation' => [
+                'label' => 'lang:admin::lang.dashboard.text_total_completed_reservation',
+                'icon' => ' bg-success text-white fa fa-table',
             ],
         ];
     }
@@ -150,21 +150,25 @@ class Statistics extends BaseDashboardWidget
         return $count;
     }
 
-    protected function getRangeQuery($range)
+    protected function applyRangeQuery($query, $range)
     {
-        if ($range === 'today')
-            return 'DATE(date_added) = '.date('Y-m-d');
+        if ($range === 'week') {
+            $start = Carbon::now()->subWeek();
+        }
+        elseif ($range === 'month') {
+            $start = Carbon::now()->subMonth();
+        }
+        elseif ($range === 'year') {
+            $start = Carbon::now()->startOfYear();
+        }
+        else {
+            $start = Carbon::now()->today();
+        }
 
-        if ($range === 'week')
-            return 'WEEK(date_added) = '.date('W');
-
-        if ($range === 'month')
-            return 'MONTH(date_added) = '.date('m');
-
-        if ($range === 'year')
-            return 'YEAR(date_added) = '.date('Y');
-
-        return $range;
+        $query->whereBetween('date_added', [
+            $start,
+            Carbon::now(),
+        ]);
     }
 
     /**
@@ -178,10 +182,11 @@ class Statistics extends BaseDashboardWidget
     {
         $query = Orders_model::query();
         $query->where('status_id', '>', '0')
-              ->where('status_id', '!=', setting('canceled_order_status'))
-              ->whereRaw($this->getRangeQuery($range));
+            ->where('status_id', '!=', setting('canceled_order_status'));
 
-        return currency_format($query->sum('order_total'));
+        $this->applyRangeQuery($query, $range);
+
+        return currency_format($query->sum('order_total') ?? 0);
     }
 
     /**
@@ -196,9 +201,11 @@ class Statistics extends BaseDashboardWidget
         $query->where(function ($query) {
             $query->where('status_id', '<=', '0');
             $query->orWhere('status_id', setting('canceled_order_status'));
-        })->whereRaw($this->getRangeQuery($range));
+        });
 
-        return currency_format($query->sum('order_total'));
+        $this->applyRangeQuery($query, $range);
+
+        return currency_format($query->sum('order_total') ?? 0);
     }
 
     /**
@@ -213,9 +220,11 @@ class Statistics extends BaseDashboardWidget
         $query->where(function ($query) {
             $query->where('status_id', '>', '0');
             $query->where('status_id', '!=', setting('canceled_order_status'));
-        })->where('payment', 'cod')->whereRaw($this->getRangeQuery($range));
+        })->where('payment', 'cod');
 
-        return currency_format($query->sum('order_total'));
+        $this->applyRangeQuery($query, $range);
+
+        return currency_format($query->sum('order_total') ?? 0);
     }
 
     /**
@@ -227,7 +236,7 @@ class Statistics extends BaseDashboardWidget
     protected function getTotalCustomerSum($range)
     {
         $query = Customers_model::query();
-        $query->whereRaw($this->getRangeQuery($range));
+        $this->applyRangeQuery($query, $range);
 
         return $query->count();
     }
@@ -241,7 +250,7 @@ class Statistics extends BaseDashboardWidget
     protected function getTotalOrderSum($range)
     {
         $query = Orders_model::query();
-        $query->whereRaw($this->getRangeQuery($range));
+        $this->applyRangeQuery($query, $range);
 
         return $query->count();
     }
@@ -255,8 +264,9 @@ class Statistics extends BaseDashboardWidget
     protected function getTotalCompletedOrderSum($range)
     {
         $query = Orders_model::query();
-        $query->whereIn('status_id', setting('completed_order_status') ?? [])
-              ->whereRaw($this->getRangeQuery($range));
+        $query->whereIn('status_id', setting('completed_order_status') ?? []);
+
+        $this->applyRangeQuery($query, $range);
 
         return $query->count();
     }
@@ -274,9 +284,11 @@ class Statistics extends BaseDashboardWidget
         $query->where(function ($query) {
             $query->where('order_type', '1');
             $query->orWhere('order_type', 'delivery');
-        })->whereRaw($this->getRangeQuery($range));
+        });
 
-        return currency_format($query->sum('order_total'));
+        $this->applyRangeQuery($query, $range);
+
+        return currency_format($query->sum('order_total') ?? 0);
     }
 
     /**
@@ -291,22 +303,75 @@ class Statistics extends BaseDashboardWidget
         $query->where(function ($query) {
             $query->where('order_type', '2');
             $query->orWhere('order_type', 'collection');
-        })->whereRaw($this->getRangeQuery($range));
+        });
 
-        return currency_format($query->sum('order_total'));
+        $this->applyRangeQuery($query, $range);
+
+        return currency_format($query->sum('order_total') ?? 0);
     }
 
     /**
-     * Return the total number of table reservations
+     * Return the total number of reserved tables
      *
      * @param $range
      * @return int
      */
     protected function getTotalReservedTableSum($range)
     {
+        $query = Reservations_model::with('tables');
+        $query->where('status_id', setting('confirmed_reservation_status'));
+        $this->applyRangeQuery($query, $range);
+        $result = $query->get();
+
+        $result->pluck('tables')->flatten();
+
+        return $result->count();
+    }
+
+    /**
+     * Return the total number of reserved table guests
+     *
+     * @param $range
+     * @return int
+     */
+    protected function getTotalReservedGuestSum($range)
+    {
         $query = Reservations_model::query();
-        $query->where('status_id', '>', '0')
-              ->whereRaw($this->getRangeQuery($range));
+        $query->where('status_id', setting('confirmed_reservation_status'));
+
+        $this->applyRangeQuery($query, $range);
+
+        return $query->sum('guest_num') ?? 0;
+    }
+
+    /**
+     * Return the total number of reservations
+     *
+     * @param $range
+     * @return int
+     */
+    protected function getTotalReservationSum($range)
+    {
+        $query = Reservations_model::query();
+        $query->where('status_id', '!=', setting('canceled_reservation_status'));
+
+        $this->applyRangeQuery($query, $range);
+
+        return $query->count();
+    }
+
+    /**
+     * Return the total number of completed reservations
+     *
+     * @param $range
+     * @return int
+     */
+    protected function getTotalCompletedReservationSum($range)
+    {
+        $query = Reservations_model::query();
+        $query->where('status_id', setting('confirmed_reservation_status'));
+
+        $this->applyRangeQuery($query, $range);
 
         return $query->count();
     }

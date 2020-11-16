@@ -1,4 +1,6 @@
-<?php namespace Admin\FormWidgets;
+<?php
+
+namespace Admin\FormWidgets;
 
 use Admin\Classes\BaseFormWidget;
 use Admin\Classes\FormField;
@@ -7,8 +9,6 @@ use Carbon\Carbon;
 /**
  * Date picker
  * Renders a date picker field.
- *
- * @package Admin
  */
 class DatePicker extends BaseFormWidget
 {
@@ -79,6 +79,7 @@ class DatePicker extends BaseFormWidget
         }
 
         if ($mode == 'date') {
+            $this->addJs('~/app/system/assets/ui/js/vendor/moment.min.js', 'moment-js');
             $this->addCss('vendor/datepicker/bootstrap-datepicker.min.css', 'bootstrap-datepicker-css');
             $this->addJs('vendor/datepicker/bootstrap-datepicker.min.js', 'bootstrap-datepicker-js');
             $this->addCss('css/datepicker.css', 'datepicker-css');
@@ -87,8 +88,8 @@ class DatePicker extends BaseFormWidget
 
         if ($mode == 'datetime') {
             $this->addJs('~/app/system/assets/ui/js/vendor/moment.min.js', 'moment-js');
-            $this->addCss('vendor/datetimepicker/bootstrap-datetimepicker.min.css', 'bootstrap-datetimepicker-css');
-            $this->addJs('vendor/datetimepicker/bootstrap-datetimepicker.min.js', 'bootstrap-datetimepicker-js');
+            $this->addCss('vendor/datetimepicker/tempusdominus-bootstrap-4.min.css', 'tempusdominus-bootstrap-4-css');
+            $this->addJs('vendor/datetimepicker/tempusdominus-bootstrap-4.min.js', 'tempusdominus-bootstrap-4-js');
             $this->addCss('css/datepicker.css', 'datepicker-css');
             $this->addJs('js/datepicker.js', 'datepicker-js');
         }
@@ -123,16 +124,15 @@ class DatePicker extends BaseFormWidget
             $formatAlias = setting('date_format').' '.setting('time_format');
         }
 
-        $find = ['d', 'D', 'm', 'M', 'y', 'Y', 'H', 'i'];
-        $replace = ['dd', 'DD', 'mm', 'MM', 'yy', 'yyyy', 'HH', 'i'];
+        $find = ['d' => 'dd', 'D' => 'DD', 'm' => 'mm', 'M' => 'MM', 'y' => 'yy', 'Y' => 'yyyy', 'H' => 'HH', 'i' => 'i'];
 
         $this->vars['timeFormat'] = $this->timeFormat;
         $this->vars['dateFormat'] = $this->dateFormat;
         $this->vars['dateTimeFormat'] = $this->dateFormat.' '.$this->timeFormat;
 
         $this->vars['datePickerFormat'] = ($this->mode == 'datetime')
-            ? str_replace($find, $replace, $formatAlias)
-            : str_replace($find, $replace, $this->dateFormat);
+            ? convert_php_to_moment_js_format($formatAlias)
+            : strtr($this->dateFormat, $find);
 
         $this->vars['formatAlias'] = $formatAlias;
         $this->vars['value'] = $value;

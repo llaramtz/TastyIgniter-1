@@ -4,10 +4,12 @@ namespace Admin\Widgets;
 
 use Admin\Classes\BaseWidget;
 use Admin\Classes\ListColumn;
+use Admin\Facades\AdminAuth;
 use Carbon\Carbon;
 use DB;
 use Exception;
 use Html;
+use Igniter\Flame\Exception\ApplicationException;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Collection;
@@ -49,6 +51,11 @@ class Lists extends BaseWidget
      * @var bool|string Display pagination when limiting records per page.
      */
     public $showPagination = 'auto';
+
+    /**
+     * @var bool Display page numbers with pagination, disable to improve performance.
+     */
+    public $showPageNumbers = TRUE;
 
     /**
      * @var bool Display a drag handle next to each record row.
@@ -159,7 +166,8 @@ class Lists extends BaseWidget
 
     public function loadAssets()
     {
-        $this->addJs('../../../formwidgets/repeater/assets/js/jquery-sortable.js', 'jquery-sortable-js');
+        $this->addJs('../../../formwidgets/repeater/assets/vendor/sortablejs/Sortable.min.js', 'sortable-js');
+        $this->addJs('../../../formwidgets/repeater/assets/vendor/sortablejs/jquery-sortable.js', 'jquery-sortable-js');
         $this->addJs('js/lists.js', 'lists-js');
     }
 
@@ -180,7 +188,9 @@ class Lists extends BaseWidget
         $this->vars['showCheckboxes'] = $this->showCheckboxes;
         $this->vars['showDragHandle'] = $this->showDragHandle;
         $this->vars['showSetup'] = $this->showSetup;
+        $this->vars['showFilter'] = count($this->filterCallbacks);
         $this->vars['showPagination'] = $this->showPagination;
+        $this->vars['showPageNumbers'] = $this->showPageNumbers;
         $this->vars['showSorting'] = $this->showSorting;
         $this->vars['sortColumn'] = $this->getSortColumn();
         $this->vars['sortDirection'] = $this->sortDirection;
@@ -208,7 +218,7 @@ class Lists extends BaseWidget
 
     protected function validateModel()
     {
-        if (!$this->model OR !$this->model instanceof Model) {
+        if (!$this->model OR !$this->model instanceof \Illuminate\Database\Eloquent\Model) {
             throw new Exception(sprintf(lang('admin::lang.list.missing_model'), get_class($this->controller)));
         }
 
@@ -218,8 +228,8 @@ class Lists extends BaseWidget
     /**
      * Replaces the @ symbol with a table name in a model
      *
-     * @param  string $sql
-     * @param  string $table
+     * @param string $sql
+     * @param string $table
      *
      * @return string
      */
@@ -240,7 +250,7 @@ class Lists extends BaseWidget
         $withs = [];
 
         // Extensibility
-        $this->fireEvent('admin.list.extendQueryBefore', [$query]);
+        $this->fireSystemEvent('admin.list.extendQueryBefore', [$query]);
 
         // Prepare searchable column names
         $primarySearchable = [];
@@ -259,7 +269,7 @@ class Lists extends BaseWidget
                 } // Primary
                 else {
                     $columnName = isset($column->sqlSelect)
-                        ? DB::raw($this->parseTableName($column->sqlSelect, $table))
+                        ? DB::raw($this->parseTableName($column->sqlSelect, $primaryTable))
                         : DB::getTablePrefix().$primaryTable.'.'.$column->columnName;
 
                     $primarySearchable[] = $columnName;
@@ -283,7 +293,6 @@ class Lists extends BaseWidget
 
         // Apply search term
         $query->where(function ($innerQuery) use ($primarySearchable, $relationSearchable, $joins) {
-
             // Search primary columns
             if (count($primarySearchable) > 0) {
                 $this->applySearchToQuery($innerQuery, $primarySearchable, 'or');
@@ -314,7 +323,6 @@ class Lists extends BaseWidget
 
             // Relation column
             if (isset($column->relation)) {
-
                 $relationType = $this->model->getRelationType($column->relation);
                 if ($relationType == 'morphTo') {
                     throw new Exception('The relationship morphTo is not supported for list columns.');
@@ -328,12 +336,12 @@ class Lists extends BaseWidget
                 $countQuery = $relationObj->getRelationExistenceCountQuery($relationObj->getRelated()->newQueryWithoutScopes(), $query);
 
                 $joinSql = $this->isColumnRelated($column, TRUE)
-                    ? Db::raw("group_concat(".$sqlSelect." separator ', ')")
+                    ? Db::raw('group_concat('.$sqlSelect." separator ', ')")
                     : Db::raw($sqlSelect);
 
-                $joinSql = $countQuery->select($joinSql)->toSql();
+                $joinSql = $countQuery->select($joinSql)->toRawSql();
 
-                $selects[] = Db::raw("(".$joinSql.") as ".$alias);
+                $selects[] = Db::raw('('.$joinSql.') as '.$alias);
             } // Primary column
             else {
                 $sqlSelect = $this->parseTableName($column->sqlSelect, $primaryTable);
@@ -399,7 +407,7 @@ class Lists extends BaseWidget
     /**
      * Get a specified column object
      *
-     * @param  string $column
+     * @param string $column
      *
      * @return mixed
      */
@@ -494,6 +502,15 @@ class Lists extends BaseWidget
     public function addColumns(array $columns)
     {
         foreach ($columns as $columnName => $config) {
+            // Check if admin has permissions to show this column
+            $permissions = array_get($config, 'permissions');
+            if (!empty($permissions) AND !AdminAuth::getUser()->hasPermission($permissions, FALSE)) {
+                continue;
+            }
+
+            // Check that the filter scope matches the active location context
+            if ($this->isLocationAware($config)) continue;
+
             $this->allColumns[$columnName] = $this->makeListColumn($columnName, $config);
         }
     }
@@ -648,13 +665,13 @@ class Lists extends BaseWidget
         if (isset($result['title']))
             $result['title'] = e(lang($result['title']));
 
-        $result['class'] = 'btn-action'.(isset($result['class']) ? ' '.$result['class'] : null);
+        $result['class'] = isset($result['class']) ? $result['class'] : null;
 
         foreach ($result as $key => $value) {
             if ($key == 'href' AND !preg_match('#^(\w+:)?//#i', $value)) {
                 $result[$key] = $this->controller->pageUrl($value);
             }
-            else if (is_string($value)) {
+            elseif (is_string($value)) {
                 $result[$key] = lang($value);
             }
         }
@@ -674,7 +691,7 @@ class Lists extends BaseWidget
                 $value = null;
             }
             elseif ($this->isColumnRelated($column, TRUE)) {
-                $value = implode(', ', $record->{$columnName}->lists($column->valueFrom));
+                $value = implode(', ', $record->{$columnName}->pluck($column->valueFrom)->all());
             }
             elseif ($this->isColumnRelated($column) OR $this->isColumnPivot($column)) {
                 $value = $record->{$columnName} ? $record->{$columnName}->{$column->valueFrom} : null;
@@ -731,7 +748,7 @@ class Lists extends BaseWidget
      */
     protected function evalMoneyTypeValue($record, $column, $value)
     {
-        return currency_format($value);
+        return number_format($value, 2);
     }
 
     /**
@@ -739,8 +756,8 @@ class Lists extends BaseWidget
      */
     protected function evalSwitchTypeValue($record, $column, $value)
     {
-        $onText = lang($column->onText ?? 'admin::lang.text_enabled');
-        $offText = lang($column->offText ?? 'admin::lang.text_disabled');
+        $onText = lang($column->config['onText'] ?? 'admin::lang.text_enabled');
+        $offText = lang($column->config['offText'] ?? 'admin::lang.text_disabled');
 
         return $value ? $onText : $offText;
     }
@@ -754,11 +771,12 @@ class Lists extends BaseWidget
             return null;
         }
 
-        $timestamp = $this->validateDateTimeValue($value, $column);
+        $dateTime = $this->validateDateTimeValue($value, $column);
 
-        $format = $column->format !== null ? $column->format : setting('date_format').' '.setting('time_format');
+        $format = $column->format ?? setting('date_format').' '.setting('time_format');
+        $format = parse_date_format($format);
 
-        return mdate($format, $timestamp);
+        return $dateTime->format($format);
     }
 
     /**
@@ -770,11 +788,12 @@ class Lists extends BaseWidget
             return null;
         }
 
-        $timestamp = $this->validateDateTimeValue($value, $column);
+        $dateTime = $this->validateDateTimeValue($value, $column);
 
-        $format = $column->format !== null ? $column->format : setting('time_format');
+        $format = $column->format ?? setting('time_format');
+        $format = parse_date_format($format);
 
-        return mdate($format, $timestamp);
+        return $dateTime->format($format);
     }
 
     /**
@@ -786,11 +805,14 @@ class Lists extends BaseWidget
             return null;
         }
 
-        $timestamp = $this->validateDateTimeValue($value, $column);
+        $dateTime = $this->validateDateTimeValue($value, $column);
 
-        $format = $column->format !== null ? $column->format : setting('date_format');
+        $format = $column->format ?? setting('date_format');
+        $format = parse_date_format($format);
 
-        return mdate($format, $timestamp);
+        return $format
+            ? $dateTime->format($format)
+            : $dateTime->toDayDateTimeString($format);
     }
 
     /**
@@ -802,11 +824,9 @@ class Lists extends BaseWidget
             return null;
         }
 
-        $timestamp = $this->validateDateTimeValue($value, $column);
+        $dateTime = $this->validateDateTimeValue($value, $column);
 
-        $value = mdate('%d-%m-%Y %H:%i:%s', $timestamp);
-
-        return time_elapsed($value);
+        return $dateTime->diffForHumans();
     }
 
     /**
@@ -818,11 +838,30 @@ class Lists extends BaseWidget
             return null;
         }
 
-        $timestamp = $this->validateDateTimeValue($value, $column);
+        $dateTime = $this->validateDateTimeValue($value, $column);
 
-        $value = mdate('%d-%m-%Y %H:%i:%s', $timestamp);
+        return day_elapsed($dateTime, FALSE);
+    }
 
-        return day_elapsed($value);
+    /**
+     * Process as time as current tense (Today at 0:00)
+     */
+    protected function evalTimetenseTypeValue($record, $column, $value)
+    {
+        if ($value === null) {
+            return null;
+        }
+        $dateTime = $this->validateDateTimeValue($value, $column);
+
+        return day_elapsed($dateTime);
+    }
+
+    /**
+     * Process as partial reference
+     */
+    protected function evalCurrencyTypeValue($record, $column, $value)
+    {
+        return currency_format($value);
     }
 
     /**
@@ -830,11 +869,13 @@ class Lists extends BaseWidget
      */
     protected function validateDateTimeValue($value, $column)
     {
-        if (!is_numeric($value))
-            return strtotime($value);
+        $value = make_carbon($value);
 
-        if ($value instanceof Carbon)
-            $value = $value->getTimestamp();
+        if (!$value instanceof Carbon) {
+            throw new ApplicationException(sprintf(
+                lang('admin::lang.list.invalid_column_datetime'), $column->columnName
+            ));
+        }
 
         return $value;
     }
@@ -999,7 +1040,7 @@ class Lists extends BaseWidget
     protected function isSortable($column = null)
     {
         if ($column === null) {
-            return (count($this->getSortableColumns()) > 0);
+            return count($this->getSortableColumns()) > 0;
         }
         else {
             return array_key_exists($column, $this->getSortableColumns());
@@ -1060,6 +1101,16 @@ class Lists extends BaseWidget
     }
 
     /**
+     * Event handler to reset the list set up.
+     */
+    public function onResetSetup()
+    {
+        $this->resetSession();
+
+        return $this->onRefresh();
+    }
+
+    /**
      * Returns all the list columns used for list set up.
      */
     protected function getSetupListColumns()
@@ -1092,8 +1143,8 @@ class Lists extends BaseWidget
     /**
      * Check if column refers to a relation of the model
      *
-     * @param  ListColumn $column List column object
-     * @param  boolean $multi If set, returns true only if the relation is a "multiple relation type"
+     * @param ListColumn $column List column object
+     * @param bool $multi If set, returns true only if the relation is a "multiple relation type"
      *
      * @return bool
      * @throws \Exception
@@ -1128,9 +1179,9 @@ class Lists extends BaseWidget
     /**
      * Checks if a column refers to a pivot model specifically.
      *
-     * @param  ListColumn $column List column object
+     * @param ListColumn $column List column object
      *
-     * @return boolean
+     * @return bool
      */
     protected function isColumnPivot($column)
     {

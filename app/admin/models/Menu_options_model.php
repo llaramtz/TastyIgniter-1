@@ -1,57 +1,90 @@
-<?php namespace Admin\Models;
+<?php
 
+namespace Admin\Models;
+
+use Admin\Traits\Locationable;
 use Igniter\Flame\Database\Traits\Purgeable;
 use Igniter\Flame\Database\Traits\Validation;
 use Model;
 
 /**
  * MenuOptions Model Class
- *
- * @package Admin
  */
 class Menu_options_model extends Model
 {
+    use Locationable;
     use Purgeable;
     use Validation;
+
+    const LOCATIONABLE_RELATION = 'locations';
+
+    protected static $allergensOptionsCache;
 
     /**
      * @var string The database table name
      */
-    protected $table = 'options';
+    protected $table = 'menu_options';
 
     /**
      * @var string The database table primary key
      */
     protected $primaryKey = 'option_id';
 
-    protected $guarded = [];
-
     protected $fillable = ['option_id', 'option_name', 'display_type'];
+
+    public $casts = [
+        'option_id' => 'integer',
+        'priority' => 'integer',
+    ];
 
     public $relation = [
         'hasMany' => [
-            'option_values' => ['Admin\Models\Menu_option_values_model', 'foreignKey' => 'option_id'],
+            'menu_options' => ['Admin\Models\Menu_item_options_model', 'foreignKey' => 'option_id', 'delete' => TRUE],
+            'option_values' => ['Admin\Models\Menu_option_values_model', 'foreignKey' => 'option_id', 'delete' => TRUE],
+        ],
+        'morphToMany' => [
+            'allergens' => ['Admin\Models\Allergens_model', 'name' => 'allergenable'],
+            'locations' => ['Admin\Models\Locations_model', 'name' => 'locationable'],
         ],
     ];
 
     public $rules = [
         ['option_name', 'lang:admin::lang.menu_options.label_option_name', 'required|min:2|max:32'],
         ['display_type', 'lang:admin::lang.menu_options.label_display_type', 'required|alpha'],
+        ['locations.*', 'lang:admin::lang.label_location', 'integer'],
     ];
 
-    public $purgeable = ['option_values'];
+    protected $purgeable = ['option_values'];
 
     public static function getRecordEditorOptions()
     {
         return self::selectRaw('option_id, concat(option_name, " (", display_type, ")") AS display_name')
-                   ->dropdown('display_name');
+            ->dropdown('display_name');
+    }
+
+    public function getDisplayTypeOptions()
+    {
+        return [
+            'radio' => 'lang:admin::lang.menu_options.text_radio',
+            'checkbox' => 'lang:admin::lang.menu_options.text_checkbox',
+            'select' => 'lang:admin::lang.menu_options.text_select',
+            'quantity' => 'lang:admin::lang.menu_options.text_quantity',
+        ];
+    }
+
+    public function getAllergensOptions()
+    {
+        if (self::$allergensOptionsCache)
+            return self::$allergensOptionsCache;
+
+        return self::$allergensOptionsCache = Allergens_model::dropdown('name')->all();
     }
 
     //
     // Events
     //
 
-    public function afterSave()
+    protected function afterSave()
     {
         $this->restorePurgedValues();
 
@@ -95,8 +128,8 @@ class Menu_options_model extends Model
         $idsToKeep = [];
         foreach ($optionValues as $value) {
             $optionValue = $this->option_values()->firstOrNew([
-                'option_value_id' => $value['option_value_id'],
-                'option_id'       => $optionId,
+                'option_value_id' => array_get($value, 'option_value_id'),
+                'option_id' => $optionId,
             ])->fill(array_except($value, ['option_value_id', 'option_id']));
 
             $optionValue->saveOrFail();
@@ -104,7 +137,7 @@ class Menu_options_model extends Model
         }
 
         $this->option_values()->where('option_id', $optionId)
-             ->whereNotIn('option_value_id', $idsToKeep)->delete();
+            ->whereNotIn('option_value_id', $idsToKeep)->delete();
 
         return count($idsToKeep);
     }

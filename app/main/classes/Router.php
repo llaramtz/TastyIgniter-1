@@ -35,8 +35,6 @@ use Main\Template\Page as PageTemplate;
  * /pages/:page_name?|^[a-z0-9\-]+$ - this will match /pages/my-page</pre>
  *
  * Based on october\cms\Router
- *
- * @package Main
  */
 class Router
 {
@@ -95,7 +93,7 @@ class Router
             if ($cacheable) {
                 $fileName = $this->getCachedUrlFileName($url, $urlList);
                 if (is_array($fileName)) {
-                    list($fileName, $this->parameters) = $fileName;
+                    [$fileName, $this->parameters] = $fileName;
                 }
             }
 
@@ -118,7 +116,7 @@ class Router
                         Cache::put(
                             $this->getUrlListCacheKey(),
                             base64_encode(serialize($urlList)),
-                            Config::get('system.urlMapCacheTtl', 1)
+                            Config::get('system.urlMapCacheTtl', now()->addDay())
                         );
                     }
                 }
@@ -156,12 +154,10 @@ class Router
     public function findByFile($fileName, $parameters = [])
     {
         if (!strlen(File::extension($fileName))) {
-            $fileName .= '.php';
+            $fileName .= '.blade.php';
         }
 
-        $router = $this->getRouterObject();
-
-        return $router->url($fileName, $parameters);
+        return $this->getRouterObject()->url($fileName, $parameters);
     }
 
     /**
@@ -204,7 +200,7 @@ class Router
      * The URL map can is cached. The clearUrlMap() method resets the cache. By default
      * the map is updated every time when a page is saved in the back-end, or
      * when the interval defined with the system.urlMapCacheTtl expires.
-     * @return boolean Returns true if the URL map was loaded from the cache. Otherwise returns false.
+     * @return bool Returns true if the URL map was loaded from the cache. Otherwise returns false.
      */
     protected function loadUrlMap()
     {
@@ -227,7 +223,7 @@ class Router
                 Cache::put(
                     $this->getUrlMapCacheKey(),
                     base64_encode(serialize($map)),
-                    Config::get('system.urlMapCacheTtl', 1)
+                    Config::get('system.urlMapCacheTtl', now()->addDay())
                 );
             }
 
@@ -251,7 +247,7 @@ class Router
     /**
      * Sets the current routing parameters.
      *
-     * @param  array $parameters
+     * @param array $parameters
      *
      * @return void
      */

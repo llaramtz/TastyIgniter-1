@@ -1,4 +1,6 @@
-<?php namespace Admin\Traits;
+<?php
+
+namespace Admin\Traits;
 
 use Admin\Classes\FormField;
 use ApplicationException;
@@ -25,6 +27,11 @@ trait FormModelWidget
         return new $class;
     }
 
+    /**
+     * @param $recordId
+     * @return \Igniter\Flame\Database\Model
+     * @throws \ApplicationException
+     */
     public function findFormModel($recordId)
     {
         if (!strlen($recordId)) {
@@ -38,7 +45,7 @@ trait FormModelWidget
         $result = $query->find($recordId);
 
         if (!$result)
-            throw new ApplicationException(sprintf(lang('admin::lang.form.not_found'), $recordId));
+            throw new Exception('Record ID ['.$recordId.'] not found in model '.get_class($model));
 
         return $result;
     }
@@ -48,7 +55,7 @@ trait FormModelWidget
      * a nested HTML array attribute.
      * Eg: list($model, $attribute) = $this->resolveModelAttribute($this->valueFrom);
      *
-     * @param  string $attribute .
+     * @param string $attribute .
      *
      * @return array
      */
@@ -56,9 +63,10 @@ trait FormModelWidget
     {
         try {
             return $this->formField->resolveModelAttribute($this->model, $attribute);
-        } catch (Exception $ex) {
+        }
+        catch (Exception $ex) {
             throw new ApplicationException(Lang::get('backend::lang.model.missing_relation', [
-                'class'    => get_class($this->model),
+                'class' => get_class($this->model),
                 'relation' => $attribute,
             ]));
         }
@@ -71,7 +79,7 @@ trait FormModelWidget
      */
     protected function getRelationModel()
     {
-        list($model, $attribute) = $this->resolveModelAttribute($this->valueFrom);
+        [$model, $attribute] = $this->resolveModelAttribute($this->valueFrom);
 
         if (!$model OR !$model->hasRelation($attribute)) {
             throw new ApplicationException(sprintf("Model '%s' does not contain a definition for '%s'.",
@@ -85,7 +93,7 @@ trait FormModelWidget
 
     protected function getRelationObject()
     {
-        list($model, $attribute) = $this->resolveModelAttribute($this->valueFrom);
+        [$model, $attribute] = $this->resolveModelAttribute($this->valueFrom);
 
         if (!$model OR !$model->hasRelation($attribute)) {
             throw new ApplicationException(sprintf("Model '%s' does not contain a definition for '%s'.",
@@ -99,7 +107,7 @@ trait FormModelWidget
 
     protected function getRelationType()
     {
-        list($model, $attribute) = $this->resolveModelAttribute($this->valueFrom);
+        [$model, $attribute] = $this->resolveModelAttribute($this->valueFrom);
 
         return $model->getRelationType($attribute);
     }
@@ -136,7 +144,7 @@ trait FormModelWidget
                     in_array($model->getRelationType($attribute), $singularTypes)
                 ));
 
-            if ($isNested AND is_array($value) AND $model->{$attribute}) {
+            if ($isNested AND is_array($value)) {
                 $this->setModelAttributes($model->{$attribute}, $value);
             }
             elseif ($value !== FormField::NO_SAVE_DATA) {

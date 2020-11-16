@@ -1,12 +1,12 @@
-<?php namespace System\Models;
+<?php
+
+namespace System\Models;
 
 use Igniter\Flame\Database\Traits\Sortable;
-use Main\Models\Image_tool_model;
 use Model;
 
 /**
  * Countries Model Class
- * @package System
  */
 class Countries_model extends Model
 {
@@ -24,7 +24,12 @@ class Countries_model extends Model
      */
     protected $primaryKey = 'country_id';
 
-    protected $fillable = ['country_id', 'country_name', 'iso_code_2', 'iso_code_3', 'format', 'status', 'flag'];
+    protected $guarded = [];
+
+    public $casts = [
+        'status' => 'boolean',
+        'priority' => 'integer',
+    ];
 
     public $relation = [
         'hasOne' => [
@@ -35,15 +40,6 @@ class Countries_model extends Model
     public static function getDropdownOptions()
     {
         return static::isEnabled()->dropdown('country_name');
-    }
-
-    //
-    // Accessors & Mutators
-    //
-
-    public function getFlagUrlAttribute($value)
-    {
-        return Image_tool_model::resize($this->flag, ['default' => 'flags/no_flag.png']);
     }
 
     //

@@ -49,6 +49,7 @@
                 var attrName = attribute.name.substr(11),
                     attrValue = attribute.value
 
+                $modal.find('[data-modal-html="'+attrName+'"]').html(attrValue)
                 $modal.find('[data-modal-text="'+attrName+'"]').text(attrValue)
                 $modal.find('[data-modal-input="'+attrName+'"]').val(attrValue)
             }
@@ -59,4 +60,17 @@
         event.preventDefault()
         $.ti.flashMessage({class: 'danger', text: message, allowDismiss: false})
     })
+
+    /*
+     * Ensure the CSRF token is added to all AJAX requests.
+     */
+    $.ajaxPrefilter(function(options) {
+        var token = $('meta[name="csrf-token"]').attr('content')
+
+        if (token) {
+            if (!options.headers) options.headers = {}
+            options.headers['X-CSRF-TOKEN'] = token
+        }
+    })
 }(window.jQuery);
+

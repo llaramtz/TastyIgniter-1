@@ -1,29 +1,14 @@
-<?php namespace Main\Template;
+<?php
 
-use Main\Contracts\TemplateLoader;
-use Main\Contracts\TemplateSource;
+namespace Main\Template;
+
 use Main\Template\Partial as PartialTemplate;
 
 /**
  * This class implements a template loader for the main app.
  */
-class Loader extends \Igniter\Flame\Pagic\Loader implements TemplateLoader
+class Loader extends \Igniter\Flame\Pagic\Loader
 {
-    /**
-     * @var \Main\Template\Model A object to load the template from.
-     */
-    protected $source;
-
-    /**
-     * Sets a object to load the template from.
-     *
-     * @param \Main\Contracts\TemplateSource $source Specifies the Template object.
-     */
-    public function setSource(TemplateSource $source)
-    {
-        $this->source = $source;
-    }
-
     public function getMarkup($name)
     {
         if (!$this->validateTemplateSource($name))

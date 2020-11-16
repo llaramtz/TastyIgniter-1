@@ -1,20 +1,22 @@
-<?php namespace Admin\Models;
+<?php
+
+namespace Admin\Models;
 
 use Admin\Traits\Locationable;
 use Igniter\Flame\Auth\Models\User;
-use Igniter\Flame\Exception\ApplicationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Model;
-use System\Models\Settings_model;
 
 /**
  * Reviews Model Class
- *
- * @package Admin
  */
 class Reviews_model extends Model
 {
     use Locationable;
+
+    const CREATED_AT = 'date_added';
+
+    const UPDATED_AT = null;
 
     /**
      * @var string The database table name
@@ -31,15 +33,25 @@ class Reviews_model extends Model
      */
     public $timestamps = TRUE;
 
-    const CREATED_AT = 'date_added';
+    protected $guarded = [];
+
+    public $casts = [
+        'customer_id' => 'integer',
+        'sale_id' => 'integer',
+        'location_id' => 'integer',
+        'quality' => 'integer',
+        'service' => 'integer',
+        'delivery' => 'integer',
+        'review_status' => 'boolean',
+    ];
 
     public $relation = [
         'belongsTo' => [
-            'location' => ['Admin\Models\Locations_model', 'foreignKey' => 'location_id', 'scope' => 'isEnabled'],
+            'location' => ['Admin\Models\Locations_model', 'scope' => 'isEnabled'],
             'customer' => 'Admin\Models\Customers_model',
         ],
         'morphTo' => [
-            'reviewable' => [],
+            'reviewable' => ['name' => 'sale'],
         ],
     ];
 
@@ -67,9 +79,7 @@ class Reviews_model extends Model
 
     public function getRatingOptions()
     {
-        $result = Settings_model::where('sort', 'ratings')->first();
-
-        return array_get($result->value, 'ratings', []);
+        return array_get(setting('ratings'), 'ratings', []);
     }
 
     //
@@ -93,8 +103,11 @@ class Reviews_model extends Model
         if ($customer instanceof User) {
             $query->where('customer_id', $customer->getKey());
         }
-        else if (strlen($customer)) {
+        elseif (strlen($customer)) {
             $query->where('customer_id', $customer);
+        }
+        else {
+            $query->has('customer');
         }
 
         if (!is_array($sort)) {
@@ -107,7 +120,7 @@ class Reviews_model extends Model
                 if (count($parts) < 2) {
                     array_push($parts, 'desc');
                 }
-                list($sortField, $sortDirection) = $parts;
+                [$sortField, $sortDirection] = $parts;
                 $query->orderBy($sortField, $sortDirection);
             }
         }
@@ -125,6 +138,13 @@ class Reviews_model extends Model
         return $query->where('sale_type', $sale->getMorphClass())
                      ->where('sale_id', $sale->getKey())
                      ->where('customer_id', $customerId);
+    }
+
+    public function scopeWhereReviewable($query, $causer)
+    {
+        return $query
+            ->where('sale_type', $causer->getMorphClass())
+            ->where('sale_id', $causer->getKey());
     }
 
     //
@@ -148,5 +168,13 @@ class Reviews_model extends Model
     public function getReviewDates()
     {
         return $this->pluckDates('date_added');
+    }
+
+    public static function checkReviewed(Model $object, Model $customer)
+    {
+        $query = self::whereReviewable($object)
+                     ->where('customer_id', $customer->getKey());
+
+        return $query->exists();
     }
 }

@@ -1,17 +1,21 @@
-<?php namespace System\Models;
+<?php
+
+namespace System\Models;
 
 use Carbon\Carbon;
-use Config;
 use DateTime;
 use DateTimeZone;
+use Exception;
+use Main\Classes\ThemeManager;
+use Main\Template\Page;
 use Model;
-use Setting;
+use Session;
 use System\Classes\ExtensionManager;
+use System\Classes\UpdateManager;
 use System\Traits\ConfigMaker;
 
 /**
  * Settings Model Class
- * @package System
  */
 class Settings_model extends Model
 {
@@ -37,14 +41,17 @@ class Settings_model extends Model
 
     protected $items;
 
+    /**
+     * @var array Cache of registration callbacks.
+     */
+    protected static $callbacks = [];
+
     public static function listMenuSettingItems($menu, $item, $user)
     {
-        $fieldConfig = (new static)->getFieldConfig();
-        $settingsConfig = array_except($fieldConfig, 'toolbar');
-
         $options = [];
-        foreach ($settingsConfig as $settingItem) {
-            $options[$settingItem['label']] = [$settingItem['icon'], $settingItem['url']];
+        $settingItems = (new static)->listSettingItems();
+        foreach (array_get($settingItems, 'core', []) as $settingItem) {
+            $options[$settingItem->label] = [$settingItem->icon, $settingItem->url];
         }
 
         return $options;
@@ -55,6 +62,8 @@ class Settings_model extends Model
         $now = Carbon::now();
 
         return [
+            'd M Y' => $now->format('d M Y'),
+            'M d Y' => $now->format('M d Y'),
             'd m Y' => $now->format('d m Y'),
             'm d Y' => $now->format('m d Y'),
             'Y m d' => $now->format('Y m d'),
@@ -74,19 +83,45 @@ class Settings_model extends Model
         return [
             'h:i A' => $now->format('h:i A'),
             'h:i a' => $now->format('h:i a'),
-            'H:i'   => $now->format('H:i'),
+            'H:i' => $now->format('H:i'),
         ];
     }
 
     public static function getPageLimitOptions()
     {
         return [
-            '10'  => '10',
-            '20'  => '20',
-            '50'  => '50',
-            '75'  => '75',
+            '10' => '10',
+            '20' => '20',
+            '50' => '50',
+            '75' => '75',
             '100' => '100',
         ];
+    }
+
+    public static function getMenusPageOptions()
+    {
+        $theme = ThemeManager::instance()->getActiveTheme();
+
+        return Page::getDropdownOptions($theme, TRUE);
+    }
+
+    public static function onboardingIsComplete()
+    {
+        if (!Session::has('settings.errors'))
+            return FALSE;
+
+        return count(array_filter((array)Session::get('settings.errors'))) === 0;
+    }
+
+    public static function updatesCount()
+    {
+        try {
+            $updates = UpdateManager::instance()->requestUpdateList();
+
+            return count(array_get($updates, 'items', []));
+        }
+        catch (Exception $ex) {
+        }
     }
 
     public function getValueAttribute()
@@ -100,16 +135,17 @@ class Settings_model extends Model
     // Registration
     //
 
-    public function getFieldConfig()
+    public function getFieldConfig($code)
     {
         if ($this->fieldConfig !== null) {
             return $this->fieldConfig;
         }
 
-        $this->configPath = '~/app/system/models/config';
-        $config = $this->makeConfig($this->settingsFields, ['form']);
+        $settingItem = $this->getSettingItem('core.'.$code);
+        if (!is_array($settingItem->form))
+            $settingItem->form = array_get($this->makeConfig($settingItem->form, ['form']), 'form', []);
 
-        return $this->fieldConfig = $config['form'] ?? [];
+        return $this->fieldConfig = $settingItem->form ?? [];
     }
 
     public function getFieldValues()
@@ -128,9 +164,7 @@ class Settings_model extends Model
 
     public function getSettingDefinitions($code)
     {
-        $fieldConfig = $this->getFieldConfig();
-
-        return $fieldConfig[$code] ?? [];
+        return $this->getSettingItem('core.'.$code);
     }
 
     public function getSettingItem($code)
@@ -151,11 +185,11 @@ class Settings_model extends Model
 
     public function loadSettingItems()
     {
-        $fieldConfig = $this->getFieldConfig();
-        $settingsConfig = array_except($fieldConfig, 'toolbar');
-        $this->registerSettingItems('core', $settingsConfig);
+        foreach (self::$callbacks as $callback) {
+            $callback($this);
+        }
 
-        // Load plugin items
+        // Load extension items
         $extensions = ExtensionManager::instance()->getExtensions();
 
         foreach ($extensions as $code => $extension) {
@@ -191,21 +225,21 @@ class Settings_model extends Model
         }
 
         $defaultDefinitions = [
-            'code'        => null,
-            'label'       => null,
+            'code' => null,
+            'label' => null,
             'description' => null,
-            'icon'        => null,
-            'url'         => null,
-            'priority'    => null,
+            'icon' => null,
+            'url' => null,
+            'priority' => null,
             'permissions' => [],
-            'context'     => 'settings',
-            'model'       => null,
-            'form'        => null,
+            'context' => 'settings',
+            'model' => null,
+            'form' => null,
         ];
 
         foreach ($definitions as $code => $definition) {
             $item = array_merge($defaultDefinitions, array_merge($definition, [
-                'code'  => $code,
+                'code' => $code,
                 'owner' => $owner,
             ]));
 
@@ -219,19 +253,9 @@ class Settings_model extends Model
         }
     }
 
-    //
-    // Mailer Config
-    //
-
-    public static function applyMailerConfigValues()
+    public static function registerCallback(callable $callback)
     {
-        Config::set('mail.driver', Setting::get('protocol', Config::get('mail.driver')));
-        Config::set('mail.host', Setting::get('smtp_host', Config::get('mail.host')));
-        Config::set('mail.port', Setting::get('smtp_port', Config::get('mail.port')));
-        Config::set('mail.from.address', Setting::get('sender_email', Config::get('mail.from.address')));
-        Config::set('mail.from.name', Setting::get('sender_name', Config::get('mail.from.name')));
-        Config::set('mail.username', Setting::get('smtp_user', Config::get('mail.username')));
-        Config::set('mail.password', Setting::get('smtp_pass', Config::get('mail.password')));
+        self::$callbacks[] = $callback;
     }
 
     //
@@ -248,7 +272,7 @@ class Settings_model extends Model
             $current_timezone = new DateTimeZone($timezone_identifier);
 
             $temp_timezones[] = [
-                'offset'     => (int)$current_timezone->getOffset($utc_time),
+                'offset' => (int)$current_timezone->getOffset($utc_time),
                 'identifier' => $timezone_identifier,
             ];
         }

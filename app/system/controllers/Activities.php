@@ -1,4 +1,6 @@
-<?php namespace System\Controllers;
+<?php
+
+namespace System\Controllers;
 
 use AdminMenu;
 
@@ -29,6 +31,8 @@ class Activities extends \Admin\Classes\AdminController
 
     public function listExtendQuery($query)
     {
-        $query->with(['subject', 'causer'])->whereNotNull('causer_id');
+        $query->listRecent([
+            'onlyUser' => $this->currentUser,
+        ]);
     }
 }

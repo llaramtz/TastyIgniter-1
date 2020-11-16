@@ -1,7 +1,8 @@
 .navbar-top {
   background-color: $gray-200;
   padding: 0;
-  border-bottom: 2px solid $gray-400;
+  border-bottom: 1px solid $gray-400;
+  box-shadow: 0 1px 1px rgba(0, 0, 0, .075);
 
   &.navbar-expand {
     .navbar {
@@ -13,6 +14,12 @@
         line-height: $page-top-line-height;
         color: $body-color;
         padding: $mainmenu-padding-x $mainmenu-padding-y;
+        position: relative;
+
+        .icon-border {
+          border-width: 3px;
+          border-style: solid;
+        }
       }
     }
   }
@@ -32,6 +39,15 @@
       vertical-align: middle;
     }
 
+    .nav-link > .badge {
+      font-size: 9px;
+      position: absolute;
+      top: 18px;
+      right: 10px;
+      padding: 0.25em 0.6em;
+      border-radius: 10rem;
+    }
+
     > li.nav-item.show > a .fa {
       color: $primary;
     }
@@ -41,8 +57,8 @@
       border-bottom: 8px solid $gray-200;
       border-left: 8px solid transparent;
       border-right: 8px solid transparent;
-      bottom: -13px;
-      display: inline-block;
+      bottom: -2px;
+      display: none;
       left: 50%;
       margin-left: -8px;
       position: absolute;
@@ -76,16 +92,22 @@
     left: auto;
     right: 25px;
     padding: 0;
-    margin-top: 12px;
+    margin-top: -8px;
     line-height: $line-height-base;
-    width: $mainmenu-dropdown-width;
+    min-width: $mainmenu-dropdown-width;
     box-shadow: $box-shadow;
+    border: $border-width solid $border-color;
+
+    .dropdown-item {
+      .fa {
+        margin-right: 14px;
+      }
+    }
 
     .dropdown-header {
       font-size: $font-size-base;
       color: $gray-600;
-      text-align: center;
-      padding: 10px 0 8px;
+      padding: 10px 20px 8px;
       border-bottom: $border-width solid $border-color;
     }
 
@@ -110,18 +132,26 @@
       overflow-x: hidden;
       padding: 0;
 
+      &.menu-lg {
+        min-width: $mainmenu-dropdown-width + 130px;
+      }
+
       .menu-item {
         border-bottom: $border-width solid $dropdown-border-color;
       }
 
       .menu-item:hover {
-        background-color: $dropdown-divider-bg;
+        background-color: $dropdown-link-hover-bg;
       }
 
       .menu-link {
         padding: 10px 20px;
         display: block;
         text-decoration: none;
+        color: $text-muted;
+      }
+
+      .menu-item.active .menu-link {
         color: $body-color;
       }
 
@@ -144,7 +174,7 @@
         padding: 15px 0 9px;
         display: block;
         border: 1px solid transparent;
-        color: $gray-700;
+        color: $gray-600;
       }
 
       .menu-link:hover {
@@ -163,20 +193,6 @@
         font-size: 32px;
       }
     }
-
-    .user-info {
-      background-color: $primary;
-      color: $white;
-      overflow: hidden;
-      padding: 20px 15px 14px;
-      border-radius: 2px 2px 0 0;
-      margin-bottom: 7px;
-    }
-
-    .user-info .username {
-      font-size: 18px;
-      font-weight: $font-weight-bold;
-    }
   }
 
   @include media-breakpoint-down(sm) {
@@ -184,8 +200,8 @@
       margin-left: 0;
 
       .navbar {
-        border-bottom: $border-width solid $sidenav-bg;
-        background-color: $sidenav-bg-dark;
+        border-bottom: $border-width solid $gray-800;
+        background-color: $gray-900;
         position: fixed;
         top: 0;
         left: 0;
@@ -222,6 +238,7 @@
     }
   }
 }
+
 .navbar-brand {
   display: block;
   padding: 0;
@@ -232,9 +249,10 @@
     padding-left: 10px;
     line-height: $logo-line-height;
     font-size: $logo-font-size;
-    color: $logo-font-color;
+    color: $gray-800;
   }
 }
+
 .page-title {
   margin: 0px;
   padding-left: 15px;
@@ -244,10 +262,12 @@
   small {
     color: $gray-600;
   }
+
   span {
     vertical-align: text-top;
   }
 }
+
 @include media-breakpoint-down(sm) {
   .page-title {
     display: none;

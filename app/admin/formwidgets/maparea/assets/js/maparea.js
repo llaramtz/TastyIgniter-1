@@ -4,89 +4,77 @@
     var MapArea = function (element, options) {
         this.$el = $(element)
         this.$form = this.$el.closest('form')
-        this.$mapToolbar = this.$el.find('[data-control="map-toolbar"]')
-        this.$mapView = this.$el.find('[data-control="map-view"]')
-        this.mapRefreshed = false
+        this.$mapView = null
         this.options = options || {}
 
         this.init()
     }
 
     MapArea.prototype.init = function () {
-        $(document).on('shown.bs.tab', 'a[data-toggle="tab"]', $.proxy(this.refreshMap, this))
+        $(window).on('recordEditorModalShown', $.proxy(this.onModalShown, this))
 
-        $(document).on('hide.bs.collapse', this.$el.find('.collapse'), $.proxy(this.onAreaHidden(), this))
-        $(document).on('show.bs.collapse', this.$el.find('.collapse'), $.proxy(this.onAreaShown(), this))
-
-        this.$el.on('change', '[data-toggle="map-shape"]', $.proxy(this.onShapeTypeToggle, this))
-
-        this.$el.on('click', '[data-control="toggle-editor"]', $.proxy(this.onToggleEditor, this))
-        this.$el.on('click', '[data-control="add-area"]', $.proxy(this.onAddArea, this))
-        this.$el.on('click', '[data-control="remove-area"]', $.proxy(this.removeArea, this))
-
-        this.$mapView.on('click.shape.ti.mapview', $.proxy(this.onShapeClicked, this))
-
-        this.$form.on('submit', $.proxy(this.onSubmitForm, this))
+        this.$el.on('click', '[data-control="load-area"]', $.proxy(this.onLoadArea, this))
+        this.$el.on('click', '[data-control="remove-area"]', $.proxy(this.onRemoveArea, this))
     }
 
-    MapArea.prototype.refreshMap = function (event) {
-        var $tab = $($(event.target).attr('href')),
-            $prevTab = $(event.relatedTarget),
-            $mapView = $tab.find('[data-control="map-view"]')
+    MapArea.prototype.onModalShown = function (event, $modalEl) {
+        var $typeInput = $modalEl.find('[data-toggle="map-shape"]')
 
-        if (!this.mapRefreshed && $mapView.length) {
-            $tab.find('[data-control="map-view"]').mapView('refresh');
-            this.mapRefreshed = !!($mapView.find('.map-view').children().length);
+        this.$mapView = $modalEl.find('[data-control="map-view"]')
 
-            if (!this.mapRefreshed)
-                $prevTab.tab('show');
+        $typeInput.on('change', $.proxy(this.onShapeTypeToggle, this))
+
+        this.refreshMap();
+
+        this.$mapView.on('click.shape.ti.mapview', '.map-view', $.proxy(this.onShapeClicked, this))
+    }
+
+    MapArea.prototype.refreshMap = function () {
+        if (this.$mapView.length && !this.$mapView.find('.map-view').children().length) {
+            this.$mapView.mapView('refresh');
         }
     }
 
-    MapArea.prototype.addArea = function (lastCounter, shapeId) {
-        lastCounter++
+    MapArea.prototype.onLoadArea = function (event) {
+        var self = this,
+            $button = $(event.currentTarget),
+            $area = $button.closest('[data-control="area"]')
 
-        this.$el.get(0).setAttribute('data-last-counter', lastCounter)
-
-        this.createShapeInput(shapeId)
+        new $.ti.recordEditor.modal({
+            alias: this.options.alias,
+            recordId: $area.data('areaId'),
+            onSubmit: $.proxy(self.onSubmitForm, self),
+            onSave: function () {
+                this.hide()
+            }
+        })
     }
 
-    MapArea.prototype.removeArea = function (event) {
+    MapArea.prototype.onRemoveArea = function (event) {
         var $button = $(event.currentTarget),
-            confirmMsg = $button.data('confirm'),
-            $selectedArea = this.$el.find('[data-control="area"]:not(.hide)')
+            confirmMsg = $button.data('confirmMessage'),
+            $selectedArea = $button.closest('[data-control="area"]'),
+            areaId = $selectedArea.data('areaId')
 
-        if (!$selectedArea.length || $selectedArea.length !== 1)
-            return alert('Please select an area to delete.')
-
-        if (!confirm(confirmMsg))
+        if (confirmMsg.length && !confirm(confirmMsg))
             return
 
-        $selectedArea.remove()
-        this.$el.find('[data-control="map-view"]').mapView('removeShape', $selectedArea.attr('id'));
-
-        this.selectArea(this.$el.find('[data-control="area"]:first-child').attr('id'))
+        $.ti.loadingIndicator.show()
+        $.request(this.options.removeHandler, {
+            data: {areaId: areaId},
+        }).done(function () {
+            $selectedArea.remove()
+        }).always(function () {
+            $.ti.loadingIndicator.hide()
+        });
     }
 
-    MapArea.prototype.selectArea = function (shapeId) {
-        this.$el.find('[data-control="area"]').addClass('hide')
+    MapArea.prototype.createShape = function (shapeId) {
+        var $areaContainer = this.$el.find('#' + shapeId),
+            $areaShape = $areaContainer.find('[data-map-shape]'),
+            shapeOptions = $areaShape.data()
 
-        this.$el.find('#' + shapeId).removeClass('hide')
-    }
-
-    MapArea.prototype.createShapeInput = function (shapeId) {
-        var $areaContainer = this.$el.find('#'+shapeId),
-            color = $areaContainer.data('areaColor'),
-            shapeOptions = {
-                id: shapeId,
-                default: this.options.defaultShape,
-                options: {
-                    fillColor: color,
-                    strokeColor: color
-                },
-            }
-
-        this.$mapView.mapView('createShape', shapeOptions)
+        this.$mapView.mapView('createShape', $areaShape, shapeOptions)
     }
 
     // EVENT HANDLERS
@@ -99,86 +87,35 @@
         if (!shape.getId())
             return;
 
-        this.selectArea(shape.getId())
-
         this.$mapView.mapView('editShape', shape);
-    }
-
-    MapArea.prototype.onToggleEditor = function (event) {
-        var $button = $(event.currentTarget),
-            showEditor = !$button.hasClass('active')
-
-        if (showEditor) {
-            this.$el.find('.map-area-container').removeClass('hide')
-            this.$mapView.closest('.map-view-container').removeClass('mw-100')
-        } else {
-            this.$el.find('.map-area-container').addClass('hide')
-            this.$mapView.closest('.map-view-container').addClass('mw-100')
-        }
-
-        this.$mapView.mapView('clearAllEditable')
         this.$mapView.mapView('resize')
-    }
-
-    MapArea.prototype.onAddArea = function (event) {
-        var self = this,
-            lastCounter = parseInt(this.$el.get(0).getAttribute('data-last-counter')),
-            $button = $(event.target),
-            handler = $button.data('handler')
-
-        $.request(handler, {
-            data: {lastCounter: lastCounter},
-            success: function (data, textStatus, jqXHR) {
-                var dataArray = []
-
-                dataArray = data
-
-                for (var partial in dataArray) {
-                    var selector = partial
-                    if (jQuery.type(selector) === 'string' && selector.charAt(0) == '@') {
-                        $(selector.substring(1)).append(dataArray[partial])
-                    }
-                }
-
-                self.addArea(lastCounter, dataArray.areaShapeId)
-            }
-        })
-    }
-
-    MapArea.prototype.onAreaShown = function () {
-        var $toolbar = this.$mapToolbar,
-            shapeId = $toolbar.attr('data-selected-area')
-
-        if (!shapeId)
-            return;
-
-        this.$el.find('[data-control="map-view"]').mapView('editShape', shapeId);
-    }
-
-    MapArea.prototype.onAreaHidden = function () {
-        var $toolbar = this.$mapToolbar,
-            shapeId = $toolbar.attr('data-selected-area')
-
-        if (!shapeId)
-            return;
-
-        this.$el.find('[data-control="map-view"]').mapView('clearEditShape', shapeId)
     }
 
     MapArea.prototype.onShapeTypeToggle = function (event) {
         var $input = $(event.target),
-            $container = $input.closest('[data-control="area"]'),
-            shapeId = $container.attr('id'),
+            $container = $input.closest('[data-control="area-form"]'),
+            areaId = $container.find('[data-map-shape]').data('id'),
             type = $input.val()
 
-        this.$mapView.mapView('hideShape', shapeId)
-            .mapView('showShape', shapeId, type)
-            .mapView('editShape', shapeId);
+        if (type === 'address')
+            return
+
+        this.refreshMap()
+
+        var shape = this.$mapView.mapView('getShape', areaId)
+        if (shape.options) {
+            shape.options.default = type
+            this.$mapView.mapView('hideShape', areaId).mapView('showShape', areaId, type)
+            window.setTimeout(function() {
+                this.$mapView.mapView('resize')
+            }.bind(this), 200);
+        }
     }
 
     MapArea.prototype.onSubmitForm = function (event) {
         try {
-            var shapeData = this.$el.find('[data-control="map-view"]').mapView('getShapeData')
+            var shapeData = this.$mapView.mapView('getShapeData'),
+                $modalForm = this.$mapView.closest('[data-control="area-form"]')
         } catch (ex) {
             throw new Error(ex);
         }
@@ -186,30 +123,22 @@
         for (var shapeId in shapeData) {
             var circle = shapeData[shapeId].circle,
                 polygon = shapeData[shapeId].polygon,
-                vertices = shapeData[shapeId].vertices
+                vertices = shapeData[shapeId].vertices,
+                color = $modalForm.find('[data-map-shape]').data('color')
 
-            this.$el.find('#' + shapeId + ' [data-shape-value="circle"]').val(JSON.stringify(circle))
-            this.$el.find('#' + shapeId + ' [data-shape-value="polygon"]').val(polygon)
-            this.$el.find('#' + shapeId + ' [data-shape-value="vertices"]').val(JSON.stringify(vertices))
+            $modalForm.find('[data-shape-value="color"]').val(color)
+            $modalForm.find('[data-shape-value="circle"]').val(JSON.stringify(circle))
+            $modalForm.find('[data-shape-value="polygon"]').val(polygon)
+            $modalForm.find('[data-shape-value="vertices"]').val(JSON.stringify(vertices))
         }
     }
 
     // HELPER METHODS
     // ============================
 
-    MapArea.prototype.areaColor = function (index) {
-        if (!this.options.areaColors)
-            return;
-
-        if (this.options.areaColors[index])
-            return this.options.areaColors[index];
-    }
-
     MapArea.DEFAULTS = {
-        areaColors: [],
-        defaultShape: 'polygon',
-        vertices: null,
-        circle: null
+        alias: undefined,
+        removeHandler: undefined,
     }
 
     // PLUGIN DEFINITION
@@ -238,9 +167,6 @@
 
     $(document).render(function () {
         $('[data-control="map-area"]').mapArea();
-
-        $('.tab-pane.active').find('[data-control="map-view"]').mapView('refresh');
-
     })
 
 }(window.jQuery);

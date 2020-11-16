@@ -4,7 +4,7 @@
     var MarkdownEditor = function (element, options) {
         this.$el = $(element)
         this.options = options || {}
-        this.$textarea = $('textarea:first', this.$el)
+        this.$textarea = $('textarea:first', this.$el)[0]
         this.editor = null
         this.$form = null
 
@@ -23,15 +23,9 @@
         this.$form = this.$el.closest('form')
 
         this.initEditor()
-
-        // this.$toolbar.on('click', '.btn, .md-dropdown-button', this.proxy(this.onClickToolbarButton))
     }
 
     MarkdownEditor.prototype.dispose = function () {
-        this.$el.off('dispose-control', this.proxy(this.dispose))
-
-        this.$toolbar.off('click', '.btn, .md-dropdown-button', this.proxy(this.onClickToolbarButton))
-
         this.$el.removeData('ti.markdownEditor')
 
         this.$el = null
@@ -45,38 +39,15 @@
 
     MarkdownEditor.prototype.initEditor = function () {
 
-        this.editor = editormd({
-            id: this.$el.attr('id'),
-            // width   : "90%",
-            height: 640,
-            path: "/app/admin/formwidgets/markdowneditor/assets/vendor/editormd/lib/"
-        });
+        this.options.element = this.$textarea
+        this.editor = new EasyMDE(this.options)
+
+        this.editor.codemirror.setSize(null, this.options.height)
     }
 
     //
     // Events
     //
-
-    MarkdownEditor.prototype.onClickToolbarButton = function (ev) {
-        var $target = $(ev.target),
-            $button = $target.is('a') ? $target : $target.closest('.btn'),
-            action = $button.data('button-action'),
-            template = $button.data('button-template')
-
-        $button.blur()
-
-        this.pauseUpdates()
-
-        if (template) {
-            this[action](template)
-        }
-        else {
-            this[action]()
-        }
-
-        this.resumeUpdates()
-        this.handleChange()
-    }
 
     //
     // Media Manager
@@ -118,8 +89,15 @@
     MarkdownEditor.DEFAULTS = {
         vendorPath: '/',
         refreshHandler: null,
-        buttons: ['formatting', 'bold', 'italic', 'unorderedlist', 'orderedlist', 'link', 'horizontalrule'],
-        viewMode: 'tab'
+        viewMode: 'tab',
+        element: null,
+        forceSync: true,
+        autoDownloadFontAwesome: false,
+        height: 400,
+        toolbar: ['bold', 'italic', 'heading',
+            '|', 'quote', 'unordered-list', 'ordered-list',
+            '|', 'link', 'image', 'table', 'horizontal-rule',
+            '|', 'preview', 'side-by-side', 'fullscreen']
     }
 
     // PLUGIN DEFINITION
